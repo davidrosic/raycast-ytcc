@@ -1,4 +1,4 @@
-# YouTube Captions for Raycast
+# YouTube Download for Raycast
 
 Download YouTube subtitles in **RAW TXT**, **clean TXT**, **SRT**, or **VTT**. Browse creator-provided and YouTube-generated tracks by language. When a video has no caption tracks, download its audio and transcribe it locally with **whisper.cpp `ggml-large-v3-turbo.bin`**. The same command can save the video's audio as MP3 or M4A, or save an MP4 video.
 

@@ -1,6 +1,6 @@
 {
   "name": "youtube-caption-workbench",
-  "title": "YouTube Captions",
+  "title": "YouTube Download",
   "description": "Download YouTube subtitles as RAW TXT, clean TXT, SRT or VTT, save audio or video, or transcribe with whisper.cpp",
   "icon": "icon.png",
   "author": "davidrosic",
