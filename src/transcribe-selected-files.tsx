@@ -1,0 +1,58 @@
+import {
+  Form,
+  getPreferenceValues,
+  getSelectedFinderItems,
+} from "@raycast/api";
+import { useEffect, useState } from "react";
+import { Settings, defaultWhisperLanguage, localFileInfo } from "./core";
+import {
+  TranscribeForm,
+  transcribeWithToast,
+  useFavoriteLanguages,
+} from "./transcription";
+
+export default function Command() {
+  const settings = getPreferenceValues<Settings>();
+  const favoriteLanguages = useFavoriteLanguages(settings);
+  const [selection, setSelection] = useState<string[]>();
+  const [running, setRunning] = useState(false);
+
+  useEffect(() => {
+    getSelectedFinderItems().then(
+      (items) =>
+        setSelection(
+          items
+            .map((item) => item.path)
+            .filter((path) => localFileInfo(path)?.isFile),
+        ),
+      () => setSelection([]),
+    );
+  }, []);
+
+  if (!selection || !favoriteLanguages.loaded) return <Form isLoading />;
+
+  return (
+    <TranscribeForm
+      initialPaths={selection}
+      favoriteLanguages={favoriteLanguages.value}
+      defaultLanguage={defaultWhisperLanguage(
+        favoriteLanguages.value,
+        settings.whisperLanguage,
+      )}
+      isLoading={running}
+      note={
+        selection.length
+          ? undefined
+          : "No files are selected in Finder. Choose files below, or select them in Finder before opening this command."
+      }
+      onTranscribe={async (paths, language, format) => {
+        setRunning(true);
+        try {
+          await transcribeWithToast(paths, language, format, settings);
+        } finally {
+          setRunning(false);
+        }
+      }}
+    />
+  );
+}

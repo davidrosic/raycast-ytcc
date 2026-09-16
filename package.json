@@ -1,7 +1,7 @@
 {
   "name": "youtube-caption-workbench",
   "title": "YouTube Download",
-  "description": "Download YouTube subtitles as RAW TXT, clean TXT, SRT or VTT, save audio or video, or transcribe with whisper.cpp",
+  "description": "Download YouTube subtitles as RAW TXT, clean TXT, SRT or VTT, save audio or video, and transcribe videos or files from Finder with whisper.cpp",
   "icon": "icon.png",
   "author": "davidrosic",
   "license": "MIT",
@@ -18,6 +18,13 @@
       "title": "YouTube Download",
       "subtitle": "Subtitles, audio & video",
       "description": "Download subtitles in any language and format, or the video's audio and video, from a YouTube link",
+      "mode": "view"
+    },
+    {
+      "name": "transcribe-selected-files",
+      "title": "Transcribe Selected Files",
+      "subtitle": "Finder · whisper.cpp",
+      "description": "Transcribe the audio or video files selected in Finder with whisper.cpp large-v3-turbo",
       "mode": "view"
     }
   ],
