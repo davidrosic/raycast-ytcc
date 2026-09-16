@@ -1,21 +1,22 @@
 # YouTube Download
 
-Save YouTube subtitles in any available language as RAW text, clean text, SRT or VTT. Download the video's audio or video too. If a video has no subtitles, transcribe it on your Mac with [whisper.cpp](https://github.com/ggml-org/whisper.cpp) and the `large-v3-turbo` model.
+Save YouTube subtitles in any available language as RAW text, clean text, SRT or VTT. Download the video's audio or video too. Transcribe videos without subtitles, or any audio or video file on your Mac, with [whisper.cpp](https://github.com/ggml-org/whisper.cpp) and the `large-v3-turbo` model.
 
 - **Copy a link, open the command.** A YouTube link in your clipboard loads right away, with no extra steps.
 - **See what you're downloading.** The video's thumbnail and title appear as soon as the link is recognized.
 - **Every subtitle track.** Creator subtitles, YouTube's automatic captions, and auto-translations are all listed.
 - **Your languages first.** Favorite languages are listed at the top, and `serbian`, `Serbian` and `serbian (orig)` all match the same language.
 - **Audio and video.** Save MP3, M4A or MP4 in the best available quality.
+- **Transcribe your own files.** Paste the path of a recording, pick the spoken language and output format, and press ⌘↵.
 - **Local transcription.** Audio is never uploaded to a transcription service.
 
 ## Requirements
 
-| Tool                                                           | Needed for                                      | Install                                       |
-| -------------------------------------------------------------- | ----------------------------------------------- | --------------------------------------------- |
-| [yt-dlp](https://github.com/yt-dlp/yt-dlp)                     | Everything                                      | `brew install yt-dlp`                         |
-| [ffmpeg](https://ffmpeg.org)                                   | MP3, M4A, MP4, and transcription                | `brew install ffmpeg`                         |
-| [whisper.cpp](https://github.com/ggml-org/whisper.cpp) + model | Transcribing videos that have no subtitles only | [Set up transcription](#set-up-transcription) |
+| Tool                                                           | Needed for                       | Install                                       |
+| -------------------------------------------------------------- | -------------------------------- | --------------------------------------------- |
+| [yt-dlp](https://github.com/yt-dlp/yt-dlp)                     | Everything                       | `brew install yt-dlp`                         |
+| [ffmpeg](https://ffmpeg.org)                                   | MP3, M4A, MP4, and transcription | `brew install ffmpeg`                         |
+| [whisper.cpp](https://github.com/ggml-org/whisper.cpp) + model | Transcription only               | [Set up transcription](#set-up-transcription) |
 
 ```sh
 brew install yt-dlp ffmpeg
@@ -41,7 +42,7 @@ Already opened the command? Paste a link with ⌘V and it loads immediately, rep
 | ⌘P   | Choose the subtitle format                                                                               |
 | ⌘K   | More actions: other subtitle formats, Show Last File in Finder, Edit Favorite Languages, and preferences |
 | Type | Filter the list, for example `english` or `mp3`                                                          |
-| ⌘V   | Paste a YouTube link and load it                                                                         |
+| ⌘V   | Paste a YouTube link and load it, or paste a file path to transcribe it                                  |
 | Esc  | Clear the search bar; press again to close                                                               |
 
 ### Supported links
@@ -76,6 +77,21 @@ Press ⌘K, choose **Edit Favorite Languages**, and enter names or codes separat
 | **MP4** | Best available video with audio, saved as MP4              |
 
 Files are named `Video Title [videoId].mp3`, `.m4a` or `.mp4`. Progress is shown on the row while it downloads.
+
+## Transcribe audio and video files
+
+Paste the full path of an audio or video file into the search bar, for example `/Users/you/Recordings/interview.m4a`. To copy a path in Finder, select the file and press ⌥⌘C. Paths starting with `~/`, paths in quotes, and paths with backslash-escaped spaces copied from Terminal also work.
+
+A form opens with two dropdowns:
+
+- **Spoken Language**: your favorite languages come first, with the best match selected. All languages supported by whisper.cpp are listed below them, along with **Detect Automatically**. Type to search the list.
+- **Output**: **RAW · TXT (all cues)**, **Clean TXT**, **SRT** or **VTT**. RAW is selected by default.
+
+Press ⌘↵ to start. The extension converts the audio with ffmpeg to the 16 kHz mono WAV whisper.cpp needs, then transcribes it with `ggml-large-v3-turbo.bin`. Conversion reads only the first audio track and takes a few seconds even for long recordings. WAV files that are already 16 kHz mono 16-bit are not converted at all. Progress is shown on the row and in a toast.
+
+The result is saved next to the original file as `interview - whisper-Serbian.srt`, or `interview - whisper-Serbian - RAW.txt` for RAW. If that folder is not writable, it goes to the download folder instead.
+
+If you type a path instead of pasting it, the file appears as a row. Press ↵ to open the form, or ⌘↵ to transcribe right away with the language and output shown in the side panel.
 
 ## Transcribe videos without subtitles
 
@@ -112,15 +128,15 @@ Set **Transcription Language** to the language spoken in the video, for example 
 
 ## Preferences
 
-| Preference                     | Default             | Description                                                        |
-| ------------------------------ | ------------------- | ------------------------------------------------------------------ |
-| **Download Folder**            | `~/Downloads`       | Where subtitles, audio, video and transcriptions are saved         |
-| **yt-dlp Executable**          | Found automatically | Path to `yt-dlp`                                                   |
-| **ffmpeg Executable**          | Found automatically | Path to `ffmpeg`                                                   |
-| **whisper.cpp CLI**            | Found automatically | Path to `whisper-cli`                                              |
-| **Large V3 Turbo Model**       | Next to whisper.cpp | Path to `ggml-large-v3-turbo.bin`                                  |
-| **Transcription Language**     | `Serbian`           | Spoken language passed to whisper.cpp, or `auto`                   |
-| **Favorite Caption Languages** | `Serbian`           | Starting value for favorite languages, until you edit them with ⌘K |
+| Preference                     | Default             | Description                                                                                                       |
+| ------------------------------ | ------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| **Download Folder**            | `~/Downloads`       | Where YouTube downloads and transcriptions are saved. File transcriptions are saved next to the file.             |
+| **yt-dlp Executable**          | Found automatically | Path to `yt-dlp`                                                                                                  |
+| **ffmpeg Executable**          | Found automatically | Path to `ffmpeg`                                                                                                  |
+| **whisper.cpp CLI**            | Found automatically | Path to `whisper-cli`                                                                                             |
+| **Large V3 Turbo Model**       | Next to whisper.cpp | Path to `ggml-large-v3-turbo.bin`                                                                                 |
+| **Transcription Language**     | `Serbian`           | Spoken language for YouTube videos without subtitles, and the default for files when no favorite language matches |
+| **Favorite Caption Languages** | `Serbian`           | Starting value for favorite languages, until you edit them with ⌘K                                                |
 
 ## Troubleshooting
 
