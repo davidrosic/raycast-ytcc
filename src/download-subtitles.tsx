@@ -17,7 +17,6 @@ import {
   ExportFormat,
   MediaFormat,
   Settings,
-  Video,
   downloadCaption,
   downloadMedia,
   favoriteLanguageTerms,
@@ -25,11 +24,9 @@ import {
   inspect,
   languageLabel,
   transcribe,
+  youtubeUrl,
 } from "./core";
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
+import { errorMessage, mediaFormats, useVideo, videoDetail } from "./video";
 
 const captionFormats: { value: ExportFormat; title: string }[] = [
   { value: "raw", title: "RAW · TXT (all cues)" },
@@ -46,41 +43,40 @@ function formatTitle(format: ExportFormat): string {
 }
 
 export default function Command() {
-  const [url, setUrl] = useState("");
-  const [loading, setLoading] = useState(false);
   const { push } = useNavigation();
   const settings = getPreferenceValues<Settings>();
+  const [url, setUrl] = useState("");
 
-  async function submit(values: { favoriteLanguages: string }) {
-    setLoading(true);
+  function submit(values: { favoriteLanguages: string }) {
+    let videoUrl: string;
     try {
-      push(
-        <CaptionList
-          video={await inspect(url, settings)}
-          settings={{
-            ...settings,
-            favoriteLanguages: values.favoriteLanguages,
-          }}
-        />,
-      );
+      videoUrl = youtubeUrl(url);
     } catch (error) {
-      await showToast({
+      showToast({
         style: Toast.Style.Failure,
-        title: "Could not inspect video",
+        title: "Invalid YouTube link",
         message: errorMessage(error),
       });
-    } finally {
-      setLoading(false);
+      return;
     }
+    push(
+      <CaptionList
+        url={videoUrl}
+        settings={{ ...settings, favoriteLanguages: values.favoriteLanguages }}
+      />,
+    );
   }
 
   return (
     <Form
-      isLoading={loading}
       enableDrafts
       actions={
         <ActionPanel>
-          <Action.SubmitForm title="Find Captions" onSubmit={submit} />
+          <Action.SubmitForm
+            title="Find Captions"
+            icon={Icon.MagnifyingGlass}
+            onSubmit={submit}
+          />
         </ActionPanel>
       }
     >
@@ -105,19 +101,17 @@ export default function Command() {
   );
 }
 
-function CaptionList({
-  video,
-  settings,
-}: {
-  video: Video;
-  settings: Settings;
-}) {
+function CaptionList({ url, settings }: { url: string; settings: Settings }) {
+  const state = useVideo(url, settings, inspect);
+  const { video, preview, error } = state;
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState("");
+  const [activeMedia, setActiveMedia] = useState<MediaFormat>();
   const [lastFile, setLastFile] = useState<string>();
   const [selectedFormat, setSelectedFormat] = useState<ExportFormat>("raw");
 
   async function save(caption: Caption, format: ExportFormat) {
+    if (!video) return;
     setBusy(true);
     const toast = await showToast({
       style: Toast.Style.Animated,
@@ -151,6 +145,7 @@ function CaptionList({
   }
 
   async function whisper() {
+    if (!video) return;
     setBusy(true);
     setProgress("Preparing transcription…");
     const toast = await showToast({
@@ -180,7 +175,9 @@ function CaptionList({
   }
 
   async function media(format: MediaFormat) {
+    if (!video) return;
     setBusy(true);
+    setActiveMedia(format);
     setProgress(`Downloading ${format.toUpperCase()}…`);
     const toast = await showToast({
       style: Toast.Style.Animated,
@@ -202,12 +199,14 @@ function CaptionList({
       toast.message = errorMessage(error);
     } finally {
       setBusy(false);
+      setActiveMedia(undefined);
       setProgress("");
     }
   }
 
+  const captions = video?.captions ?? [];
   const favoriteTerms = favoriteLanguageTerms(settings.favoriteLanguages);
-  const ranked = video.captions.map((caption) => ({
+  const ranked = captions.map((caption) => ({
     caption,
     score: Math.max(
       0,
@@ -237,24 +236,44 @@ function CaptionList({
         .slice(0, 5)
         .map((item) => item.caption);
   const featured = new Set([...favorites, ...suggestions]);
-  const manual = video.captions.filter(
+  const manual = captions.filter(
     (caption) => caption.kind === "manual" && !featured.has(caption),
   );
-  const automatic = video.captions.filter(
+  const automatic = captions.filter(
     (caption) => caption.kind === "automatic" && !featured.has(caption),
+  );
+  const preferencesAction = (
+    <Action
+      title="Open Extension Preferences"
+      icon={Icon.Gear}
+      onAction={openExtensionPreferences}
+    />
+  );
+  const lastFileAction = lastFile && (
+    <Action
+      title="Show Last File in Finder"
+      icon={Icon.Finder}
+      onAction={() => showInFinder(lastFile)}
+    />
   );
   const item = (caption: Caption) => (
     <List.Item
       key={`${caption.kind}-${caption.language}`}
       title={languageLabel(caption.language)}
       keywords={[caption.language, languageLabel(caption.language)]}
-      subtitle={
-        caption.kind === "manual"
-          ? "Creator captions"
-          : "YouTube automatic captions"
-      }
+      subtitle={caption.kind === "manual" ? "Creator" : "Automatic"}
       icon={caption.kind === "manual" ? Icon.Text : Icon.Wand}
-      accessories={[{ text: caption.language }]}
+      detail={videoDetail(state, [
+        { title: "Language", text: caption.language },
+        {
+          title: "Captions",
+          text:
+            caption.kind === "manual"
+              ? "Creator captions"
+              : "YouTube automatic captions",
+        },
+        { title: "Format", text: formatTitle(selectedFormat) },
+      ])}
       actions={
         <ActionPanel>
           <Action
@@ -276,18 +295,8 @@ function CaptionList({
                 />
               ))}
           </ActionPanel.Submenu>
-          {lastFile && (
-            <Action
-              title="Show Last File in Finder"
-              icon={Icon.Finder}
-              onAction={() => showInFinder(lastFile)}
-            />
-          )}
-          <Action
-            title="Open Extension Preferences"
-            icon={Icon.Gear}
-            onAction={openExtensionPreferences}
-          />
+          {lastFileAction}
+          {preferencesAction}
         </ActionPanel>
       }
     />
@@ -295,8 +304,9 @@ function CaptionList({
 
   return (
     <List
-      isLoading={busy}
-      navigationTitle={video.title}
+      isLoading={busy || (!video && !error)}
+      isShowingDetail
+      navigationTitle={video?.title || preview.title || "YouTube Captions"}
       searchBarPlaceholder="Filter languages…"
       searchBarAccessory={
         <List.Dropdown
@@ -314,15 +324,40 @@ function CaptionList({
         </List.Dropdown>
       }
     >
-      <List.Section title={video.title} subtitle={video.id}>
-        {!video.captions.length && (
+      {!video && (
+        <List.Item
+          title={error ? "Could not inspect video" : "Finding captions…"}
+          subtitle={error}
+          icon={error ? Icon.Warning : Icon.MagnifyingGlass}
+          detail={videoDetail(state)}
+          actions={
+            <ActionPanel>
+              {error && (
+                <Action
+                  title="Try Again"
+                  icon={Icon.RotateClockwise}
+                  onAction={state.retry}
+                />
+              )}
+              {preferencesAction}
+            </ActionPanel>
+          }
+        />
+      )}
+      {video && !captions.length && (
+        <List.Section title="No Captions Available">
           <List.Item
-            title="No captions available"
-            subtitle={
-              progress ||
-              "Download audio and transcribe with local whisper.cpp large-v3-turbo"
-            }
+            title="Transcribe with Whisper"
+            subtitle={progress || "Local large-v3-turbo"}
             icon={Icon.Microphone}
+            detail={videoDetail(state, [
+              { title: "Model", text: "ggml-large-v3-turbo" },
+              {
+                title: "Spoken Language",
+                text: settings.whisperLanguage?.trim() || "Serbian",
+              },
+              { title: "Output", text: "SRT, VTT and TXT" },
+            ])}
             actions={
               <ActionPanel>
                 <Action
@@ -330,16 +365,13 @@ function CaptionList({
                   icon={Icon.Microphone}
                   onAction={whisper}
                 />
-                <Action
-                  title="Open Extension Preferences"
-                  icon={Icon.Gear}
-                  onAction={openExtensionPreferences}
-                />
+                {lastFileAction}
+                {preferencesAction}
               </ActionPanel>
             }
           />
-        )}
-      </List.Section>
+        </List.Section>
+      )}
       {favorites.length > 0 && (
         <List.Section
           title="Favorite Languages"
@@ -356,50 +388,33 @@ function CaptionList({
           {suggestions.map(item)}
         </List.Section>
       )}
-      <List.Section title="Audio & Video">
-        <List.Item
-          title="Download MP3"
-          subtitle={progress || "Audio only"}
-          icon={Icon.Music}
-          actions={
-            <ActionPanel>
-              <Action title="Download MP3" onAction={() => media("mp3")} />
-              <Action
-                title="Open Extension Preferences"
-                onAction={openExtensionPreferences}
-              />
-            </ActionPanel>
-          }
-        />
-        <List.Item
-          title="Download M4A"
-          subtitle="Original quality audio where available"
-          icon={Icon.Music}
-          actions={
-            <ActionPanel>
-              <Action title="Download M4A" onAction={() => media("m4a")} />
-              <Action
-                title="Open Extension Preferences"
-                onAction={openExtensionPreferences}
-              />
-            </ActionPanel>
-          }
-        />
-        <List.Item
-          title="Download MP4"
-          subtitle="Video with audio"
-          icon={Icon.Video}
-          actions={
-            <ActionPanel>
-              <Action title="Download MP4" onAction={() => media("mp4")} />
-              <Action
-                title="Open Extension Preferences"
-                onAction={openExtensionPreferences}
-              />
-            </ActionPanel>
-          }
-        />
-      </List.Section>
+      {video && (
+        <List.Section title="Audio & Video">
+          {mediaFormats.map(({ value, subtitle }) => (
+            <List.Item
+              key={value}
+              title={`Download ${value.toUpperCase()}`}
+              subtitle={(activeMedia === value && progress) || subtitle}
+              icon={value === "mp4" ? Icon.Video : Icon.Music}
+              detail={videoDetail(state, [
+                { title: "Format", text: value.toUpperCase() },
+                { title: "Quality", text: subtitle },
+              ])}
+              actions={
+                <ActionPanel>
+                  <Action
+                    title={`Download ${value.toUpperCase()}`}
+                    icon={Icon.Download}
+                    onAction={() => media(value)}
+                  />
+                  {lastFileAction}
+                  {preferencesAction}
+                </ActionPanel>
+              }
+            />
+          ))}
+        </List.Section>
+      )}
       {manual.length > 0 && (
         <List.Section
           title="Creator Captions"

@@ -15,48 +15,42 @@ import { useState } from "react";
 import {
   MediaFormat,
   Settings,
-  Video,
   downloadMedia,
   inspectMedia,
+  mediaUrl,
 } from "./core";
-
-function message(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
+import { errorMessage, mediaFormats, useVideo, videoDetail } from "./video";
 
 export default function Command() {
-  const [url, setUrl] = useState("");
-  const [loading, setLoading] = useState(false);
   const { push } = useNavigation();
   const settings = getPreferenceValues<Settings>();
+  const [url, setUrl] = useState("");
 
-  async function submit() {
-    setLoading(true);
+  function submit() {
+    let videoUrl: string;
     try {
-      push(
-        <MediaList
-          video={await inspectMedia(url, settings)}
-          settings={settings}
-        />,
-      );
+      videoUrl = mediaUrl(url);
     } catch (error) {
-      await showToast({
+      showToast({
         style: Toast.Style.Failure,
-        title: "Could not inspect video",
-        message: message(error),
+        title: "Invalid video link",
+        message: errorMessage(error),
       });
-    } finally {
-      setLoading(false);
+      return;
     }
+    push(<MediaList url={videoUrl} settings={settings} />);
   }
 
   return (
     <Form
-      isLoading={loading}
       enableDrafts
       actions={
         <ActionPanel>
-          <Action.SubmitForm title="Find Media" onSubmit={submit} />
+          <Action.SubmitForm
+            title="Find Media"
+            icon={Icon.MagnifyingGlass}
+            onSubmit={submit}
+          />
         </ActionPanel>
       }
     >
@@ -73,13 +67,18 @@ export default function Command() {
   );
 }
 
-function MediaList({ video, settings }: { video: Video; settings: Settings }) {
+function MediaList({ url, settings }: { url: string; settings: Settings }) {
+  const state = useVideo(url, settings, inspectMedia);
+  const { video, preview, error } = state;
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState("");
+  const [active, setActive] = useState<MediaFormat>();
   const [lastFile, setLastFile] = useState<string>();
 
   async function save(format: MediaFormat) {
+    if (!video) return;
     setBusy(true);
+    setActive(format);
     const toast = await showToast({
       style: Toast.Style.Animated,
       title: `Downloading ${format.toUpperCase()}…`,
@@ -97,32 +96,66 @@ function MediaList({ video, settings }: { video: Video; settings: Settings }) {
     } catch (error) {
       toast.style = Toast.Style.Failure;
       toast.title = "Download failed";
-      toast.message = message(error);
+      toast.message = errorMessage(error);
     } finally {
       setBusy(false);
+      setActive(undefined);
       setProgress("");
     }
   }
 
+  const preferencesAction = (
+    <Action
+      title="Open Extension Preferences"
+      icon={Icon.Gear}
+      onAction={openExtensionPreferences}
+    />
+  );
+
   return (
     <List
-      isLoading={busy}
-      navigationTitle={video.title}
+      isLoading={busy || (!video && !error)}
+      isShowingDetail
+      navigationTitle={video?.title || preview.title || "Download Media"}
       searchBarPlaceholder="Choose a format…"
     >
-      <List.Section title={video.title} subtitle={progress || video.id}>
-        {(["mp3", "m4a", "mp4"] as const).map((format) => (
+      {!video && (
+        <List.Item
+          title={error ? "Could not inspect video" : "Finding media…"}
+          subtitle={error}
+          icon={error ? Icon.Warning : Icon.MagnifyingGlass}
+          detail={videoDetail(state)}
+          actions={
+            <ActionPanel>
+              {error && (
+                <Action
+                  title="Try Again"
+                  icon={Icon.RotateClockwise}
+                  onAction={state.retry}
+                />
+              )}
+              {preferencesAction}
+            </ActionPanel>
+          }
+        />
+      )}
+      {video &&
+        mediaFormats.map(({ value, subtitle }) => (
           <List.Item
-            key={format}
-            title={`Download ${format.toUpperCase()}`}
-            subtitle={format === "mp4" ? "Video with audio" : "Audio only"}
-            icon={format === "mp4" ? Icon.Video : Icon.Music}
+            key={value}
+            title={`Download ${value.toUpperCase()}`}
+            subtitle={(active === value && progress) || subtitle}
+            icon={value === "mp4" ? Icon.Video : Icon.Music}
+            detail={videoDetail(state, [
+              { title: "Format", text: value.toUpperCase() },
+              { title: "Quality", text: subtitle },
+            ])}
             actions={
               <ActionPanel>
                 <Action
-                  title={`Download ${format.toUpperCase()}`}
+                  title={`Download ${value.toUpperCase()}`}
                   icon={Icon.Download}
-                  onAction={() => save(format)}
+                  onAction={() => save(value)}
                 />
                 {lastFile && (
                   <Action
@@ -131,16 +164,11 @@ function MediaList({ video, settings }: { video: Video; settings: Settings }) {
                     onAction={() => showInFinder(lastFile)}
                   />
                 )}
-                <Action
-                  title="Open Extension Preferences"
-                  icon={Icon.Gear}
-                  onAction={openExtensionPreferences}
-                />
+                {preferencesAction}
               </ActionPanel>
             }
           />
         ))}
-      </List.Section>
     </List>
   );
 }

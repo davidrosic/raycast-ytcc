@@ -26,6 +26,15 @@ export type Video = {
   title: string;
   url: string;
   captions: Caption[];
+  thumbnail?: string;
+  channel?: string;
+  duration?: number;
+  uploadDate?: string;
+};
+export type VideoPreview = {
+  title?: string;
+  channel?: string;
+  thumbnail?: string;
 };
 export type Settings = {
   downloadDirectory?: string;
@@ -37,10 +46,11 @@ export type Settings = {
   favoriteLanguages?: string;
 };
 
-export function youtubeUrl(input: string): string {
+export function youtubeId(input: string): string {
+  const value = input.trim();
   let url: URL;
   try {
-    url = new URL(input.trim());
+    url = new URL(value);
   } catch {
     throw new Error("Enter a valid YouTube video URL.");
   }
@@ -67,7 +77,33 @@ export function youtubeUrl(input: string): string {
     throw new Error(
       "Enter a single YouTube video URL (watch, short, live or youtu.be).",
     );
-  return `https://www.youtube.com/watch?v=${id}`;
+  return id;
+}
+
+export function youtubeUrl(input: string): string {
+  return `https://www.youtube.com/watch?v=${youtubeId(input)}`;
+}
+
+export function isYoutubeUrl(input: string): boolean {
+  try {
+    youtubeId(input);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function mediaUrl(input: string): string {
+  if (isYoutubeUrl(input)) return youtubeUrl(input);
+  let url: URL;
+  try {
+    url = new URL(input.trim());
+  } catch {
+    throw new Error("Enter a valid video URL.");
+  }
+  if (!["https:", "http:"].includes(url.protocol))
+    throw new Error("Enter an HTTP or HTTPS video URL.");
+  return url.toString();
 }
 
 export function safeName(value: string): string {
@@ -189,7 +225,61 @@ export function parseVideo(data: unknown, url: string): Video {
     (a, b) =>
       a.language.localeCompare(b.language) || a.kind.localeCompare(b.kind),
   );
-  return { id: info.id, title: info.title, url, captions };
+  const text = (value: unknown) =>
+    typeof value === "string" && value.trim() ? value.trim() : undefined;
+  const thumbnail = text(info.thumbnail);
+  const uploadDate = text(info.upload_date);
+  return {
+    id: info.id,
+    title: info.title,
+    url,
+    captions,
+    thumbnail:
+      thumbnail && /^https?:\/\//i.test(thumbnail) ? thumbnail : undefined,
+    channel: text(info.channel) || text(info.uploader),
+    duration:
+      typeof info.duration === "number" && info.duration >= 0
+        ? info.duration
+        : undefined,
+    uploadDate:
+      uploadDate && /^\d{8}$/.test(uploadDate)
+        ? `${uploadDate.slice(0, 4)}-${uploadDate.slice(4, 6)}-${uploadDate.slice(6)}`
+        : undefined,
+  };
+}
+
+export function youtubeThumbnail(input: string): string | undefined {
+  return isYoutubeUrl(input)
+    ? `https://i.ytimg.com/vi/${youtubeId(input)}/mqdefault.jpg`
+    : undefined;
+}
+
+/** Fetches the title and channel quickly from YouTube oEmbed while yt-dlp inspects the video. */
+export async function fetchPreview(
+  input: string,
+  signal?: AbortSignal,
+): Promise<VideoPreview> {
+  if (!isYoutubeUrl(input)) return {};
+  const response = await fetch(
+    `https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(youtubeUrl(input))}`,
+    { signal },
+  );
+  if (!response.ok) return {};
+  const data = (await response.json()) as Record<string, unknown>;
+  return {
+    title: typeof data.title === "string" ? data.title : undefined,
+    channel:
+      typeof data.author_name === "string" ? data.author_name : undefined,
+  };
+}
+
+export function formatDuration(seconds: number): string {
+  const total = Math.round(seconds);
+  const parts = [Math.floor(total / 3600), Math.floor(total / 60) % 60];
+  const rest = String(total % 60).padStart(2, "0");
+  return parts[0]
+    ? `${parts[0]}:${String(parts[1]).padStart(2, "0")}:${rest}`
+    : `${parts[1]}:${rest}`;
 }
 
 export async function executable(
@@ -226,9 +316,10 @@ export async function run(
   bin: string,
   args: string[],
   onProgress?: (line: string) => void,
+  signal?: AbortSignal,
 ): Promise<string> {
   return await new Promise((done, fail) => {
-    const child = spawn(bin, args, { shell: false, windowsHide: true });
+    const child = spawn(bin, args, { shell: false, windowsHide: true, signal });
     let stdout = "";
     let stderr = "";
     child.stdout.setEncoding("utf8");
@@ -255,43 +346,41 @@ export async function run(
   });
 }
 
+async function inspectUrl(
+  url: string,
+  settings: Settings,
+  signal?: AbortSignal,
+): Promise<Video> {
+  const bin = await executable(settings.ytDlpPath, "yt-dlp");
+  const output = await run(
+    bin,
+    [
+      "--dump-single-json",
+      "--skip-download",
+      "--no-playlist",
+      "--no-warnings",
+      url,
+    ],
+    undefined,
+    signal,
+  );
+  return parseVideo(JSON.parse(output), url);
+}
+
 export async function inspect(
   urlInput: string,
   settings: Settings,
+  signal?: AbortSignal,
 ): Promise<Video> {
-  const url = youtubeUrl(urlInput);
-  const bin = await executable(settings.ytDlpPath, "yt-dlp");
-  const output = await run(bin, [
-    "--dump-single-json",
-    "--skip-download",
-    "--no-playlist",
-    "--no-warnings",
-    url,
-  ]);
-  return parseVideo(JSON.parse(output), url);
+  return await inspectUrl(youtubeUrl(urlInput), settings, signal);
 }
 
 export async function inspectMedia(
   urlInput: string,
   settings: Settings,
+  signal?: AbortSignal,
 ): Promise<Video> {
-  let url: URL;
-  try {
-    url = new URL(urlInput.trim());
-  } catch {
-    throw new Error("Enter a valid video URL.");
-  }
-  if (!["https:", "http:"].includes(url.protocol))
-    throw new Error("Enter an HTTP or HTTPS video URL.");
-  const bin = await executable(settings.ytDlpPath, "yt-dlp");
-  const output = await run(bin, [
-    "--dump-single-json",
-    "--skip-download",
-    "--no-playlist",
-    "--no-warnings",
-    url.toString(),
-  ]);
-  return parseVideo(JSON.parse(output), url.toString());
+  return await inspectUrl(mediaUrl(urlInput), settings, signal);
 }
 
 function cueTexts(input: string): string[] {

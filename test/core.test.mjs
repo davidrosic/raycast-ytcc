@@ -81,6 +81,39 @@ test("identifies creator and automatic language tracks and ignores live chat", (
   ]);
 });
 
+test("reads thumbnail, channel, duration and upload date for the preview", () => {
+  const video = core.parseVideo(
+    {
+      id: "dQw4w9WgXcQ",
+      title: "Example",
+      thumbnail: "https://i.ytimg.com/vi_webp/dQw4w9WgXcQ/maxresdefault.webp",
+      uploader: "Uploader",
+      duration: 213,
+      upload_date: "20091025",
+    },
+    "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+  );
+  assert.equal(
+    video.thumbnail,
+    "https://i.ytimg.com/vi_webp/dQw4w9WgXcQ/maxresdefault.webp",
+  );
+  assert.equal(video.channel, "Uploader");
+  assert.equal(video.uploadDate, "2009-10-25");
+  assert.equal(core.formatDuration(video.duration), "3:33");
+  assert.equal(core.formatDuration(3723), "1:02:03");
+  assert.equal(
+    core.youtubeThumbnail("https://youtu.be/dQw4w9WgXcQ"),
+    "https://i.ytimg.com/vi/dQw4w9WgXcQ/mqdefault.jpg",
+  );
+  assert.equal(
+    core.parseVideo(
+      { id: "x", title: "x", thumbnail: "file:///etc/passwd" },
+      "https://example.com",
+    ).thumbnail,
+    undefined,
+  );
+});
+
 test("plain text removes cue timing and adjacent repeated captions", () => {
   const input =
     "WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nHello &amp; welcome\n\n00:00:02.000 --> 00:00:03.000\nHello &amp; welcome\n\n00:00:03.000 --> 00:00:04.000\n<c>Next line</c>\n";
