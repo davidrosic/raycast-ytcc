@@ -4,6 +4,7 @@ import {
   Form,
   Icon,
   List,
+  LocalStorage,
   Toast,
   getPreferenceValues,
   openExtensionPreferences,
@@ -11,7 +12,7 @@ import {
   showToast,
   useNavigation,
 } from "@raycast/api";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Caption,
   ExportFormat,
@@ -26,7 +27,13 @@ import {
   transcribe,
   youtubeUrl,
 } from "./core";
-import { errorMessage, mediaFormats, useVideo, videoDetail } from "./video";
+import {
+  errorMessage,
+  mediaFormats,
+  useLinkField,
+  useVideo,
+  videoDetail,
+} from "./video";
 
 const captionFormats: { value: ExportFormat; title: string }[] = [
   { value: "raw", title: "RAW · TXT (all cues)" },
@@ -45,12 +52,20 @@ function formatTitle(format: ExportFormat): string {
 export default function Command() {
   const { push } = useNavigation();
   const settings = getPreferenceValues<Settings>();
-  const [url, setUrl] = useState("");
+  const [favoriteLanguages, setFavoriteLanguages] = useState<string>();
 
-  function submit(values: { favoriteLanguages: string }) {
-    let videoUrl: string;
+  useEffect(() => {
+    LocalStorage.getItem<string>("favoriteLanguages").then(
+      (value) =>
+        setFavoriteLanguages(value ?? settings.favoriteLanguages ?? ""),
+      () => setFavoriteLanguages(settings.favoriteLanguages ?? ""),
+    );
+  }, []);
+
+  function find(input: string) {
+    let url: string;
     try {
-      videoUrl = youtubeUrl(url);
+      url = youtubeUrl(input);
     } catch (error) {
       showToast({
         style: Toast.Style.Failure,
@@ -61,21 +76,23 @@ export default function Command() {
     }
     push(
       <CaptionList
-        url={videoUrl}
-        settings={{ ...settings, favoriteLanguages: values.favoriteLanguages }}
+        url={url}
+        settings={{ ...settings, favoriteLanguages: favoriteLanguages ?? "" }}
       />,
     );
   }
 
+  const link = useLinkField(find, favoriteLanguages !== undefined);
+
   return (
     <Form
-      enableDrafts
+      isLoading={favoriteLanguages === undefined}
       actions={
         <ActionPanel>
           <Action.SubmitForm
             title="Find Captions"
             icon={Icon.MagnifyingGlass}
-            onSubmit={submit}
+            onSubmit={() => find(link.value)}
           />
         </ActionPanel>
       }
@@ -84,16 +101,20 @@ export default function Command() {
         id="url"
         title="YouTube URL"
         placeholder="Paste a YouTube video link"
-        value={url}
-        onChange={setUrl}
+        info="A YouTube link in your clipboard, or one you paste here, is searched automatically."
+        value={link.value}
+        onChange={link.onChange}
         autoFocus
       />
       <Form.TextField
         id="favoriteLanguages"
         title="Favorite Languages"
         placeholder="Serbian, English"
-        defaultValue={settings.favoriteLanguages || ""}
-        storeValue
+        value={favoriteLanguages ?? ""}
+        onChange={(value) => {
+          setFavoriteLanguages(value);
+          LocalStorage.setItem("favoriteLanguages", value);
+        }}
         info="Comma-separated names or codes. Matches ignore case and (orig)."
       />
       <Form.Description text="Browse creator captions and YouTube automatic captions in every available language. Videos without captions can be transcribed locally." />

@@ -33,6 +33,36 @@ test("normalizes common YouTube URL forms and rejects other hosts", () => {
   assert.throws(() => core.youtubeUrl("file:///etc/passwd"));
 });
 
+test("accepts YouTube links without a scheme", () => {
+  assert.equal(core.youtubeId("youtu.be/jNQXAC9IVRw"), "jNQXAC9IVRw");
+  assert.equal(
+    core.youtubeUrl(" m.youtube.com/watch?v=jNQXAC9IVRw&list=PL1 "),
+    "https://www.youtube.com/watch?v=jNQXAC9IVRw",
+  );
+  assert.equal(core.isYoutubeUrl("hello youtu.be/jNQXAC9IVRw"), false);
+  assert.equal(core.isYoutubeUrl("https://vimeo.com/1"), false);
+  assert.equal(
+    core.mediaUrl("youtu.be/jNQXAC9IVRw?si=abc"),
+    "https://www.youtube.com/watch?v=jNQXAC9IVRw",
+  );
+  assert.equal(core.mediaUrl("https://vimeo.com/1"), "https://vimeo.com/1");
+});
+
+test("detects pasted YouTube links but not typed characters", () => {
+  const link = "https://youtu.be/jNQXAC9IVRw?si=abc";
+  assert.equal(core.pastedYoutubeLink("", link), link);
+  assert.equal(core.pastedYoutubeLink("", ` ${link}\n`), link);
+  assert.equal(core.pastedYoutubeLink(link.slice(0, -1), link), undefined);
+  assert.equal(core.pastedYoutubeLink("", "https://vimeo.com/1"), undefined);
+  const other = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
+  assert.equal(core.pastedYoutubeLink(link, other), other);
+  assert.equal(core.pastedYoutubeLink(link, link + other), other);
+  assert.equal(
+    core.pastedYoutubeLink("https://youtu.be/", "https://youtu.be/jNQXAC9IVRw"),
+    "https://youtu.be/jNQXAC9IVRw",
+  );
+});
+
 test("media lookup refuses local file URLs before invoking yt-dlp", async () => {
   await assert.rejects(
     core.inspectMedia("file:///etc/passwd", {}),

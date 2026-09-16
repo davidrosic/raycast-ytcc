@@ -1,5 +1,5 @@
-import { List, Toast, showToast } from "@raycast/api";
-import { useEffect, useState } from "react";
+import { Clipboard, List, Toast, showToast } from "@raycast/api";
+import { useEffect, useRef, useState } from "react";
 import {
   MediaFormat,
   Settings,
@@ -7,6 +7,8 @@ import {
   VideoPreview,
   fetchPreview,
   formatDuration,
+  isYoutubeUrl,
+  pastedYoutubeLink,
   youtubeThumbnail,
 } from "./core";
 
@@ -130,4 +132,39 @@ export function videoDetail(
       }
     />
   );
+}
+
+/**
+ * A link text field that searches a YouTube link from the clipboard on launch
+ * and searches again whenever a YouTube link is pasted.
+ */
+export function useLinkField(onLink: (url: string) => void, ready = true) {
+  const [value, setValue] = useState("");
+  const previous = useRef("");
+  const checkedClipboard = useRef(false);
+
+  useEffect(() => {
+    if (!ready || checkedClipboard.current) return;
+    checkedClipboard.current = true;
+    Clipboard.readText().then(
+      (text) => {
+        const link = text?.trim();
+        if (!link || previous.current || !isYoutubeUrl(link)) return;
+        previous.current = link;
+        setValue(link);
+        onLink(link);
+      },
+      () => undefined,
+    );
+  }, [ready]);
+
+  return {
+    value,
+    onChange(next: string) {
+      const link = pastedYoutubeLink(previous.current, next);
+      previous.current = link ?? next;
+      setValue(link ?? next);
+      if (link) onLink(link);
+    },
+  };
 }

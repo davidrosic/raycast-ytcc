@@ -50,7 +50,9 @@ export function youtubeId(input: string): string {
   const value = input.trim();
   let url: URL;
   try {
-    url = new URL(value);
+    url = new URL(
+      /^[a-z][a-z\d+.-]*:/i.test(value) ? value : `https://${value}`,
+    );
   } catch {
     throw new Error("Enter a valid YouTube video URL.");
   }
@@ -104,6 +106,35 @@ export function mediaUrl(input: string): string {
   if (!["https:", "http:"].includes(url.protocol))
     throw new Error("Enter an HTTP or HTTPS video URL.");
   return url.toString();
+}
+
+/** Returns the YouTube link a paste produced, or undefined for typing and edits. */
+export function pastedYoutubeLink(
+  previous: string,
+  next: string,
+): string | undefined {
+  let start = 0;
+  while (
+    start < previous.length &&
+    start < next.length &&
+    previous[start] === next[start]
+  )
+    start++;
+  let end = 0;
+  while (
+    end < previous.length - start &&
+    end < next.length - start &&
+    previous[previous.length - 1 - end] === next[next.length - 1 - end]
+  )
+    end++;
+  const pasted = next.slice(start, next.length - end).trim();
+  const value = next.trim();
+  if (pasted.length < 2) return undefined;
+  if (isYoutubeUrl(pasted))
+    return isYoutubeUrl(value) && youtubeId(value) === youtubeId(pasted)
+      ? value
+      : pasted;
+  return isYoutubeUrl(value) ? value : undefined;
 }
 
 export function safeName(value: string): string {

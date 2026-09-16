@@ -19,17 +19,22 @@ import {
   inspectMedia,
   mediaUrl,
 } from "./core";
-import { errorMessage, mediaFormats, useVideo, videoDetail } from "./video";
+import {
+  errorMessage,
+  mediaFormats,
+  useLinkField,
+  useVideo,
+  videoDetail,
+} from "./video";
 
 export default function Command() {
   const { push } = useNavigation();
   const settings = getPreferenceValues<Settings>();
-  const [url, setUrl] = useState("");
 
-  function submit() {
-    let videoUrl: string;
+  function find(input: string) {
+    let url: string;
     try {
-      videoUrl = mediaUrl(url);
+      url = mediaUrl(input);
     } catch (error) {
       showToast({
         style: Toast.Style.Failure,
@@ -38,18 +43,19 @@ export default function Command() {
       });
       return;
     }
-    push(<MediaList url={videoUrl} settings={settings} />);
+    push(<MediaList url={url} settings={settings} />);
   }
+
+  const link = useLinkField(find);
 
   return (
     <Form
-      enableDrafts
       actions={
         <ActionPanel>
           <Action.SubmitForm
             title="Find Media"
             icon={Icon.MagnifyingGlass}
-            onSubmit={submit}
+            onSubmit={() => find(link.value)}
           />
         </ActionPanel>
       }
@@ -58,8 +64,9 @@ export default function Command() {
         id="url"
         title="Video URL"
         placeholder="Paste a supported video link"
-        value={url}
-        onChange={setUrl}
+        info="A YouTube link in your clipboard, or one you paste here, is searched automatically."
+        value={link.value}
+        onChange={link.onChange}
         autoFocus
       />
       <Form.Description text="Download one video as MP4 or extract its audio as MP3 or M4A. Supports sites recognized by yt-dlp." />
