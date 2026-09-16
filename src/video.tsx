@@ -29,9 +29,11 @@ export type VideoState = {
   retry: () => void;
 };
 
+type Loaded = Omit<VideoState, "retry"> & { url: string };
+
 /** Loads video details with yt-dlp and shows a quick YouTube preview in the meantime. */
 export function useVideo(
-  url: string,
+  url: string | undefined,
   settings: Settings,
   load: (
     url: string,
@@ -39,41 +41,46 @@ export function useVideo(
     signal: AbortSignal,
   ) => Promise<Video>,
 ): VideoState {
-  const [video, setVideo] = useState<Video>();
-  const [preview, setPreview] = useState<VideoPreview>({
-    thumbnail: youtubeThumbnail(url),
-  });
-  const [error, setError] = useState<string>();
+  const [state, setState] = useState<Loaded>();
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
+    if (!url) return;
     const controller = new AbortController();
+    const update = (change: (current: Loaded) => Partial<Loaded>) =>
+      setState((current) =>
+        current?.url === url && !controller.signal.aborted
+          ? { ...current, ...change(current) }
+          : current,
+      );
+    setState({ url, preview: { thumbnail: youtubeThumbnail(url) } });
     fetchPreview(url, controller.signal).then(
-      (value) => setPreview((current) => ({ ...current, ...value })),
+      (value) =>
+        update((current) => ({ preview: { ...current.preview, ...value } })),
       () => undefined,
     );
-    return () => controller.abort();
-  }, [url]);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    setError(undefined);
-    load(url, settings, controller.signal).then(setVideo, (reason) => {
-      if (controller.signal.aborted) return;
-      setError(errorMessage(reason));
-      showToast({
-        style: Toast.Style.Failure,
-        title: "Could not inspect video",
-        message: errorMessage(reason),
-      });
-    });
+    load(url, settings, controller.signal).then(
+      (video) => update(() => ({ video })),
+      (reason) => {
+        if (controller.signal.aborted) return;
+        update(() => ({ error: errorMessage(reason) }));
+        showToast({
+          style: Toast.Style.Failure,
+          title: "Could not inspect video",
+          message: errorMessage(reason),
+        });
+      },
+    );
     return () => controller.abort();
   }, [url, attempt]);
 
+  const current = state?.url === url ? state : undefined;
   return {
-    video,
-    preview,
-    error,
+    video: current?.video,
+    preview: current?.preview ?? {
+      thumbnail: url ? youtubeThumbnail(url) : undefined,
+    },
+    error: current?.error,
     retry: () => setAttempt((value) => value + 1),
   };
 }
@@ -116,35 +123,32 @@ export function videoDetail(
 }
 
 /**
- * A link text field that searches a YouTube link from the clipboard on launch
- * and searches again whenever a YouTube link is pasted.
+ * Search text that doubles as the link field: a YouTube link in the clipboard is
+ * searched on launch, and pasting a YouTube link searches it right away.
  */
-export function useLinkField(onLink: (url: string) => void, ready = true) {
-  const [value, setValue] = useState("");
+export function useLinkSearch(onLink: (link: string) => void) {
+  const [text, setText] = useState("");
   const previous = useRef("");
-  const checkedClipboard = useRef(false);
 
   useEffect(() => {
-    if (!ready || checkedClipboard.current) return;
-    checkedClipboard.current = true;
     Clipboard.readText().then(
-      (text) => {
-        const link = text?.trim();
+      (clipboard) => {
+        const link = clipboard?.trim();
         if (!link || previous.current || !isYoutubeUrl(link)) return;
         previous.current = link;
-        setValue(link);
+        setText(link);
         onLink(link);
       },
       () => undefined,
     );
-  }, [ready]);
+  }, []);
 
   return {
-    value,
+    text,
     onChange(next: string) {
       const link = pastedYoutubeLink(previous.current, next);
       previous.current = link ?? next;
-      setValue(link ?? next);
+      setText(link ?? next);
       if (link) onLink(link);
     },
   };

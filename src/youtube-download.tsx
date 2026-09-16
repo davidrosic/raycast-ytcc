@@ -23,14 +23,16 @@ import {
   favoriteLanguageTerms,
   favoriteScore,
   inspectMedia,
+  isYoutubeUrl,
   languageLabel,
   mediaUrl,
   transcribe,
+  youtubeThumbnail,
 } from "./core";
 import {
   errorMessage,
   mediaFormats,
-  useLinkField,
+  useLinkSearch,
   useVideo,
   videoDetail,
 } from "./video";
@@ -49,80 +51,24 @@ function formatTitle(format: ExportFormat): string {
   );
 }
 
-export default function Command() {
-  const { push } = useNavigation();
-  const settings = getPreferenceValues<Settings>();
-  const [favoriteLanguages, setFavoriteLanguages] = useState<string>();
-
-  useEffect(() => {
-    LocalStorage.getItem<string>("favoriteLanguages").then(
-      (value) =>
-        setFavoriteLanguages(value ?? settings.favoriteLanguages ?? ""),
-      () => setFavoriteLanguages(settings.favoriteLanguages ?? ""),
-    );
-  }, []);
-
-  function find(input: string) {
-    let url: string;
-    try {
-      url = mediaUrl(input);
-    } catch (error) {
-      showToast({
-        style: Toast.Style.Failure,
-        title: "Invalid video link",
-        message: errorMessage(error),
-      });
-      return;
-    }
-    push(
-      <CaptionList
-        url={url}
-        settings={{ ...settings, favoriteLanguages: favoriteLanguages ?? "" }}
-      />,
-    );
+/** The video URL for search text that is a link, or undefined for filter text and unfinished links. */
+function typedLink(text: string): { isLink: boolean; url?: string } {
+  if (!/^[a-z][a-z\d+.-]*:\/\//i.test(text) && !isYoutubeUrl(text))
+    return { isLink: false };
+  try {
+    return { isLink: true, url: mediaUrl(text) };
+  } catch {
+    return { isLink: true };
   }
-
-  const link = useLinkField(find, favoriteLanguages !== undefined);
-
-  return (
-    <Form
-      isLoading={favoriteLanguages === undefined}
-      actions={
-        <ActionPanel>
-          <Action.SubmitForm
-            title="Find Captions"
-            icon={Icon.MagnifyingGlass}
-            onSubmit={() => find(link.value)}
-          />
-        </ActionPanel>
-      }
-    >
-      <Form.TextField
-        id="url"
-        title="YouTube URL"
-        placeholder="Paste a YouTube video link"
-        info="A YouTube link in your clipboard, or one you paste here, is searched automatically."
-        value={link.value}
-        onChange={link.onChange}
-        autoFocus
-      />
-      <Form.TextField
-        id="favoriteLanguages"
-        title="Favorite Languages"
-        placeholder="Serbian, English"
-        value={favoriteLanguages ?? ""}
-        onChange={(value) => {
-          setFavoriteLanguages(value);
-          LocalStorage.setItem("favoriteLanguages", value);
-        }}
-        info="Comma-separated names or codes. Matches ignore case and (orig)."
-      />
-      <Form.Description text="Browse creator captions and YouTube automatic captions in every available language. Videos without captions can be transcribed locally." />
-    </Form>
-  );
 }
 
-function CaptionList({ url, settings }: { url: string; settings: Settings }) {
+export default function Command() {
+  const settings = getPreferenceValues<Settings>();
+  const [url, setUrl] = useState<string>();
+  const [favoriteLanguages, setFavoriteLanguages] = useState(
+    settings.favoriteLanguages ?? "",
+  );
+  const search = useLinkSearch((link) => setUrl(mediaUrl(link)));
   const state = useVideo(url, settings, inspectMedia);
   const { video, preview, error } = state;
   const [busy, setBusy] = useState(false);
@@ -130,6 +76,18 @@ function CaptionList({ url, settings }: { url: string; settings: Settings }) {
   const [activeMedia, setActiveMedia] = useState<MediaFormat>();
   const [lastFile, setLastFile] = useState<string>();
   const [selectedFormat, setSelectedFormat] = useState<ExportFormat>("raw");
+
+  useEffect(() => {
+    LocalStorage.getItem<string>("favoriteLanguages").then(
+      (value) => value !== undefined && setFavoriteLanguages(value),
+      () => undefined,
+    );
+  }, []);
+
+  function saveFavoriteLanguages(value: string) {
+    setFavoriteLanguages(value);
+    LocalStorage.setItem("favoriteLanguages", value);
+  }
 
   async function save(caption: Caption, format: ExportFormat) {
     if (!video) return;
@@ -225,8 +183,19 @@ function CaptionList({ url, settings }: { url: string; settings: Settings }) {
     }
   }
 
-  const captions = video?.captions ?? [];
-  const favoriteTerms = favoriteLanguageTerms(settings.favoriteLanguages);
+  const query = search.text.trim();
+  const link = typedLink(query);
+  const pendingUrl = link.url !== url ? link.url : undefined;
+  const filter = link.isLink ? "" : query.toLocaleLowerCase();
+  const matches = (...texts: string[]) =>
+    !filter || texts.some((text) => text.toLocaleLowerCase().includes(filter));
+
+  const captions = (video?.captions ?? []).filter(
+    (caption) =>
+      matches(languageLabel(caption.language), caption.language) ||
+      favoriteScore(caption, filter) >= 60,
+  );
+  const favoriteTerms = favoriteLanguageTerms(favoriteLanguages);
   const ranked = captions.map((caption) => ({
     caption,
     score: Math.max(
@@ -263,25 +232,40 @@ function CaptionList({ url, settings }: { url: string; settings: Settings }) {
   const automatic = captions.filter(
     (caption) => caption.kind === "automatic" && !featured.has(caption),
   );
-  const preferencesAction = (
-    <Action
-      title="Open Extension Preferences"
-      icon={Icon.Gear}
-      onAction={openExtensionPreferences}
-    />
+  const mediaItems = mediaFormats.filter(({ value, subtitle }) =>
+    matches(value, subtitle, value === "mp4" ? "video" : "audio"),
   );
-  const lastFileAction = lastFile && (
-    <Action
-      title="Show Last File in Finder"
-      icon={Icon.Finder}
-      onAction={() => showInFinder(lastFile)}
-    />
+
+  const moreActions = (
+    <ActionPanel.Section>
+      {lastFile && (
+        <Action
+          title="Show Last File in Finder"
+          icon={Icon.Finder}
+          onAction={() => showInFinder(lastFile)}
+        />
+      )}
+      <Action.Push
+        title="Edit Favorite Languages"
+        icon={Icon.Star}
+        target={
+          <FavoriteLanguagesForm
+            value={favoriteLanguages}
+            onSave={saveFavoriteLanguages}
+          />
+        }
+      />
+      <Action
+        title="Open Extension Preferences"
+        icon={Icon.Gear}
+        onAction={openExtensionPreferences}
+      />
+    </ActionPanel.Section>
   );
   const item = (caption: Caption) => (
     <List.Item
       key={`${caption.kind}-${caption.language}`}
       title={languageLabel(caption.language)}
-      keywords={[caption.language, languageLabel(caption.language)]}
       subtitle={caption.kind === "manual" ? "Creator" : "Automatic"}
       icon={caption.kind === "manual" ? Icon.Text : Icon.Wand}
       detail={videoDetail(state, [
@@ -316,8 +300,7 @@ function CaptionList({ url, settings }: { url: string; settings: Settings }) {
                 />
               ))}
           </ActionPanel.Submenu>
-          {lastFileAction}
-          {preferencesAction}
+          {moreActions}
         </ActionPanel>
       }
     />
@@ -325,29 +308,76 @@ function CaptionList({ url, settings }: { url: string; settings: Settings }) {
 
   return (
     <List
-      isLoading={busy || (!video && !error)}
-      isShowingDetail
-      navigationTitle={video?.title || preview.title || "YouTube Captions"}
-      searchBarPlaceholder="Filter languages…"
+      isLoading={busy || Boolean(url && !video && !error)}
+      isShowingDetail={Boolean(url || pendingUrl)}
+      filtering={false}
+      searchText={search.text}
+      onSearchTextChange={search.onChange}
+      navigationTitle={video?.title || preview.title || "YouTube Download"}
+      searchBarPlaceholder={
+        url
+          ? "Filter languages, or paste another YouTube link…"
+          : "Paste a YouTube link…"
+      }
       searchBarAccessory={
-        <List.Dropdown
-          tooltip="Caption Format"
-          value={selectedFormat}
-          onChange={(value) => setSelectedFormat(value as ExportFormat)}
-        >
-          {captionFormats.map((item) => (
-            <List.Dropdown.Item
-              key={item.value}
-              title={item.title}
-              value={item.value}
-            />
-          ))}
-        </List.Dropdown>
+        url ? (
+          <List.Dropdown
+            tooltip="Caption Format"
+            value={selectedFormat}
+            onChange={(value) => setSelectedFormat(value as ExportFormat)}
+          >
+            {captionFormats.map((item) => (
+              <List.Dropdown.Item
+                key={item.value}
+                title={item.title}
+                value={item.value}
+              />
+            ))}
+          </List.Dropdown>
+        ) : undefined
       }
     >
-      {!video && (
+      <List.EmptyView
+        icon={url ? Icon.MagnifyingGlass : Icon.Link}
+        title={
+          url ? "No matching languages or formats" : "Paste a YouTube link"
+        }
+        description={
+          url
+            ? "Clear the search to see everything, or paste another link."
+            : "A YouTube link in your clipboard is searched when the command opens, and a pasted link is searched right away. Links from other sites: paste, then press Return."
+        }
+        actions={<ActionPanel>{moreActions}</ActionPanel>}
+      />
+      {pendingUrl && (
         <List.Item
-          title={error ? "Could not inspect video" : "Finding captions…"}
+          title="Search This Link"
+          subtitle={pendingUrl}
+          icon={Icon.MagnifyingGlass}
+          detail={videoDetail(
+            {
+              preview: {
+                thumbnail: youtubeThumbnail(pendingUrl),
+                title: "Press Return to search this link",
+              },
+            },
+            [{ title: "Link", text: pendingUrl }],
+          )}
+          actions={
+            <ActionPanel>
+              <Action
+                title="Search This Link"
+                icon={Icon.MagnifyingGlass}
+                onAction={() => setUrl(pendingUrl)}
+              />
+              {moreActions}
+            </ActionPanel>
+          }
+        />
+      )}
+      {url && !video && (
+        <List.Item
+          title={error ? "Could not inspect video" : "Loading video…"}
           subtitle={error}
           icon={error ? Icon.Warning : Icon.MagnifyingGlass}
           detail={videoDetail(state)}
@@ -360,12 +390,12 @@ function CaptionList({ url, settings }: { url: string; settings: Settings }) {
                   onAction={state.retry}
                 />
               )}
-              {preferencesAction}
+              {moreActions}
             </ActionPanel>
           }
         />
       )}
-      {video && !captions.length && (
+      {video && !video.captions.length && matches("whisper transcribe") && (
         <List.Section title="No Captions Available">
           <List.Item
             title="Transcribe with Whisper"
@@ -386,18 +416,14 @@ function CaptionList({ url, settings }: { url: string; settings: Settings }) {
                   icon={Icon.Microphone}
                   onAction={whisper}
                 />
-                {lastFileAction}
-                {preferencesAction}
+                {moreActions}
               </ActionPanel>
             }
           />
         </List.Section>
       )}
       {favorites.length > 0 && (
-        <List.Section
-          title="Favorite Languages"
-          subtitle={settings.favoriteLanguages}
-        >
+        <List.Section title="Favorite Languages" subtitle={favoriteLanguages}>
           {favorites.map(item)}
         </List.Section>
       )}
@@ -409,9 +435,9 @@ function CaptionList({ url, settings }: { url: string; settings: Settings }) {
           {suggestions.map(item)}
         </List.Section>
       )}
-      {video && (
+      {video && mediaItems.length > 0 && (
         <List.Section title="Audio & Video">
-          {mediaFormats.map(({ value, subtitle }) => (
+          {mediaItems.map(({ value, subtitle }) => (
             <List.Item
               key={value}
               title={`Download ${value.toUpperCase()}`}
@@ -428,8 +454,7 @@ function CaptionList({ url, settings }: { url: string; settings: Settings }) {
                     icon={Icon.Download}
                     onAction={() => media(value)}
                   />
-                  {lastFileAction}
-                  {preferencesAction}
+                  {moreActions}
                 </ActionPanel>
               }
             />
@@ -453,5 +478,41 @@ function CaptionList({ url, settings }: { url: string; settings: Settings }) {
         </List.Section>
       )}
     </List>
+  );
+}
+
+function FavoriteLanguagesForm({
+  value,
+  onSave,
+}: {
+  value: string;
+  onSave: (value: string) => void;
+}) {
+  const { pop } = useNavigation();
+  return (
+    <Form
+      navigationTitle="Favorite Languages"
+      actions={
+        <ActionPanel>
+          <Action.SubmitForm
+            title="Save Favorite Languages"
+            icon={Icon.Star}
+            onSubmit={(values: { favoriteLanguages: string }) => {
+              onSave(values.favoriteLanguages.trim());
+              pop();
+            }}
+          />
+        </ActionPanel>
+      }
+    >
+      <Form.TextField
+        id="favoriteLanguages"
+        title="Favorite Languages"
+        placeholder="Serbian, English"
+        defaultValue={value}
+        autoFocus
+        info="Comma-separated names or codes. Matches ignore case and (orig)."
+      />
+    </Form>
   );
 }
