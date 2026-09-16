@@ -303,6 +303,26 @@ export const whisperLanguages: { code: string; name: string }[] = [
   ["yue", "Cantonese"],
 ].map(([code, name]) => ({ code, name }));
 
+/**
+ * The whisper.cpp language to preselect: the best favorite language match,
+ * then the fallback language (the Transcription Language preference), then auto.
+ */
+export function defaultWhisperLanguage(
+  favoriteLanguages?: string,
+  fallback?: string,
+): string {
+  const names = (language: { code: string; name: string }) => [
+    language.code,
+    language.name,
+  ];
+  return (
+    rankFavorites(whisperLanguages, names, favoriteLanguages).favorites[0]
+      ?.code ??
+    rankFavorites(whisperLanguages, names, fallback).favorites[0]?.code ??
+    "auto"
+  );
+}
+
 export function whisperLanguageName(code: string): string {
   if (code === "auto") return "Detect Automatically";
   return (

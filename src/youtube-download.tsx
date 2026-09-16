@@ -4,7 +4,6 @@ import {
   Form,
   Icon,
   List,
-  LocalStorage,
   Toast,
   getPreferenceValues,
   openExtensionPreferences,
@@ -13,12 +12,13 @@ import {
   useNavigation,
 } from "@raycast/api";
 import { basename, dirname } from "node:path";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Caption,
   ExportFormat,
   MediaFormat,
   Settings,
+  defaultWhisperLanguage,
   downloadCaption,
   downloadMedia,
   favoriteScore,
@@ -31,11 +31,16 @@ import {
   mediaUrl,
   rankFavorites,
   transcribe,
-  transcribeFile,
   whisperLanguageName,
-  whisperLanguages,
   youtubeThumbnail,
 } from "./core";
+import {
+  TranscribeForm,
+  captionFormats,
+  formatTitle,
+  transcribeWithToast,
+  useFavoriteLanguages,
+} from "./transcription";
 import {
   detailMarkdown,
   errorMessage,
@@ -44,25 +49,6 @@ import {
   useVideo,
   videoDetail,
 } from "./video";
-
-const captionFormats: { value: ExportFormat; title: string }[] = [
-  { value: "raw", title: "RAW · TXT (all cues)" },
-  { value: "txt", title: "Clean TXT" },
-  { value: "srt", title: "SRT" },
-  { value: "vtt", title: "VTT" },
-];
-
-function formatTitle(format: ExportFormat): string {
-  return (
-    captionFormats.find((item) => item.value === format)?.title ||
-    format.toUpperCase()
-  );
-}
-
-const languageNames = (language: { code: string; name: string }) => [
-  language.code,
-  language.name,
-];
 
 /** The video URL for search text that is a link, or undefined for filter text and unfinished links. */
 function typedLink(text: string): { isLink: boolean; url?: string } {
@@ -76,12 +62,10 @@ function typedLink(text: string): { isLink: boolean; url?: string } {
 }
 
 export default function Command() {
-  const { push } = useNavigation();
+  const { push, pop } = useNavigation();
   const settings = getPreferenceValues<Settings>();
   const [url, setUrl] = useState<string>();
-  const [favoriteLanguages, setFavoriteLanguages] = useState(
-    settings.favoriteLanguages ?? "",
-  );
+  const favoriteLanguages = useFavoriteLanguages(settings);
   const search = useLinkSearch(
     (link) => setUrl(mediaUrl(link)),
     (text) => {
@@ -97,18 +81,6 @@ export default function Command() {
   const [activeFile, setActiveFile] = useState<string>();
   const [lastFile, setLastFile] = useState<string>();
   const [selectedFormat, setSelectedFormat] = useState<ExportFormat>("raw");
-
-  useEffect(() => {
-    LocalStorage.getItem<string>("favoriteLanguages").then(
-      (value) => value !== undefined && setFavoriteLanguages(value),
-      () => undefined,
-    );
-  }, []);
-
-  function saveFavoriteLanguages(value: string) {
-    setFavoriteLanguages(value);
-    LocalStorage.setItem("favoriteLanguages", value);
-  }
 
   async function save(caption: Caption, format: ExportFormat) {
     if (!video) return;
@@ -205,40 +177,23 @@ export default function Command() {
   }
 
   async function transcribeLocal(
-    path: string,
+    paths: string[],
     language: string,
     format: ExportFormat,
   ) {
     setBusy(true);
-    setActiveFile(path);
-    setProgress("Preparing transcription…");
-    const toast = await showToast({
-      style: Toast.Style.Animated,
-      title: `Transcribing ${basename(path)}…`,
-    });
     try {
-      const output = await transcribeFile(
-        path,
+      const outputs = await transcribeWithToast(
+        paths,
         language,
         format,
         settings,
-        (message) => {
+        (path, message) => {
+          setActiveFile(path);
           setProgress(message);
-          toast.title = message;
         },
       );
-      setLastFile(output);
-      toast.style = Toast.Style.Success;
-      toast.title = "Transcription saved";
-      toast.message = output;
-      toast.primaryAction = {
-        title: "Show in Finder",
-        onAction: () => showInFinder(output),
-      };
-    } catch (error) {
-      toast.style = Toast.Style.Failure;
-      toast.title = "Transcription failed";
-      toast.message = errorMessage(error);
+      if (outputs.length) setLastFile(outputs[outputs.length - 1]);
     } finally {
       setBusy(false);
       setActiveFile(undefined);
@@ -246,20 +201,21 @@ export default function Command() {
     }
   }
 
-  const defaultWhisperLanguage =
-    rankFavorites(whisperLanguages, languageNames, favoriteLanguages)
-      .favorites[0]?.code ??
-    rankFavorites(whisperLanguages, languageNames, settings.whisperLanguage)
-      .favorites[0]?.code ??
-    "auto";
+  const whisperLanguage = defaultWhisperLanguage(
+    favoriteLanguages.value,
+    settings.whisperLanguage,
+  );
 
   function transcribeForm(path: string) {
     return (
-      <TranscribeFileForm
-        path={path}
-        favoriteLanguages={favoriteLanguages}
-        defaultLanguage={defaultWhisperLanguage}
-        onTranscribe={transcribeLocal}
+      <TranscribeForm
+        initialPaths={[path]}
+        favoriteLanguages={favoriteLanguages.value}
+        defaultLanguage={whisperLanguage}
+        onTranscribe={(paths, language, format) => {
+          pop();
+          transcribeLocal(paths, language, format);
+        }}
       />
     );
   }
@@ -289,7 +245,7 @@ export default function Command() {
         languageLabel(a.language).localeCompare(languageLabel(b.language)),
     ),
     (caption) => [caption.language, languageLabel(caption.language)],
-    favoriteLanguages,
+    favoriteLanguages.value,
   );
   const featured = new Set([...favorites, ...suggestions]);
   const manual = captions.filter(
@@ -316,8 +272,8 @@ export default function Command() {
         icon={Icon.Star}
         target={
           <FavoriteLanguagesForm
-            value={favoriteLanguages}
-            onSave={saveFavoriteLanguages}
+            value={favoriteLanguages.value}
+            onSave={favoriteLanguages.save}
           />
         }
       />
@@ -470,7 +426,7 @@ export default function Command() {
                           },
                           {
                             title: "Spoken Language",
-                            text: whisperLanguageName(defaultWhisperLanguage),
+                            text: whisperLanguageName(whisperLanguage),
                           },
                           { title: "Output", text: formatTitle("raw") },
                           { title: "Model", text: "ggml-large-v3-turbo" },
@@ -495,13 +451,13 @@ export default function Command() {
                     />
                     <Action
                       title={
-                        defaultWhisperLanguage === "auto"
+                        whisperLanguage === "auto"
                           ? "Transcribe with Language Detection"
-                          : `Transcribe in ${whisperLanguageName(defaultWhisperLanguage)}`
+                          : `Transcribe in ${whisperLanguageName(whisperLanguage)}`
                       }
                       icon={Icon.Waveform}
                       onAction={() =>
-                        transcribeLocal(filePath, defaultWhisperLanguage, "raw")
+                        transcribeLocal([filePath], whisperLanguage, "raw")
                       }
                     />
                     <Action.ShowInFinder path={filePath} />
@@ -564,7 +520,10 @@ export default function Command() {
           </List.Section>
         )}
       {favorites.length > 0 && (
-        <List.Section title="Favorite Languages" subtitle={favoriteLanguages}>
+        <List.Section
+          title="Favorite Languages"
+          subtitle={favoriteLanguages.value}
+        >
           {favorites.map(item)}
         </List.Section>
       )}
@@ -654,91 +613,6 @@ function FavoriteLanguagesForm({
         autoFocus
         info="Comma-separated names or codes. Matches ignore case and (orig)."
       />
-    </Form>
-  );
-}
-
-function TranscribeFileForm({
-  path,
-  favoriteLanguages,
-  defaultLanguage,
-  onTranscribe,
-}: {
-  path: string;
-  favoriteLanguages: string;
-  defaultLanguage: string;
-  onTranscribe: (path: string, language: string, format: ExportFormat) => void;
-}) {
-  const { pop } = useNavigation();
-  const { favorites, suggestions } = rankFavorites(
-    whisperLanguages,
-    languageNames,
-    favoriteLanguages,
-  );
-  const featured = new Set([...favorites, ...suggestions]);
-  const languageItem = (language: { code: string; name: string }) => (
-    <Form.Dropdown.Item
-      key={language.code}
-      value={language.code}
-      title={language.name}
-      keywords={[language.code]}
-    />
-  );
-  return (
-    <Form
-      navigationTitle={`Transcribe ${basename(path)}`}
-      actions={
-        <ActionPanel>
-          <Action.SubmitForm
-            title="Transcribe"
-            icon={Icon.Microphone}
-            onSubmit={(values: { language: string; format: ExportFormat }) => {
-              pop();
-              onTranscribe(path, values.language, values.format);
-            }}
-          />
-        </ActionPanel>
-      }
-    >
-      <Form.Description title="File" text={path} />
-      <Form.Dropdown
-        id="language"
-        title="Spoken Language"
-        defaultValue={defaultLanguage}
-        info="Your favorite languages are listed first."
-      >
-        {favorites.length > 0 && (
-          <Form.Dropdown.Section title="Favorite Languages">
-            {favorites.map(languageItem)}
-          </Form.Dropdown.Section>
-        )}
-        {suggestions.length > 0 && (
-          <Form.Dropdown.Section title="Suggested Languages">
-            {suggestions.map(languageItem)}
-          </Form.Dropdown.Section>
-        )}
-        <Form.Dropdown.Section title="All Languages">
-          <Form.Dropdown.Item
-            value="auto"
-            title={whisperLanguageName("auto")}
-            icon={Icon.Wand}
-          />
-          {whisperLanguages
-            .filter((language) => !featured.has(language))
-            .sort((a, b) => a.name.localeCompare(b.name))
-            .map(languageItem)}
-        </Form.Dropdown.Section>
-      </Form.Dropdown>
-      <Form.Dropdown id="format" title="Output" defaultValue="raw">
-        {captionFormats.map((format) => (
-          <Form.Dropdown.Item
-            key={format.value}
-            value={format.value}
-            title={format.title}
-          />
-        ))}
-      </Form.Dropdown>
-      <Form.Description text="⌘↵ converts the audio to 16 kHz WAV with ffmpeg and transcribes it with whisper.cpp large-v3-turbo. The result is saved next to the file." />
     </Form>
   );
 }

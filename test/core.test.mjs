@@ -110,6 +110,9 @@ test("recognizes WAV files whisper.cpp can read without conversion", () => {
 test("lists whisper.cpp languages and formats file sizes", () => {
   assert.equal(core.whisperLanguages.length, 100);
   assert.equal(core.whisperLanguageName("sr"), "Serbian");
+  assert.equal(core.defaultWhisperLanguage("serbian (orig), English"), "sr");
+  assert.equal(core.defaultWhisperLanguage("", "English"), "en");
+  assert.equal(core.defaultWhisperLanguage("Klingon", "auto"), "auto");
   assert.equal(core.whisperLanguageName("auto"), "Detect Automatically");
   assert.equal(core.formatSize(512), "512 bytes");
   assert.equal(core.formatSize(12_345_678), "12 MB");
