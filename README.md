@@ -1,67 +1,150 @@
-# YouTube Download for Raycast
+# YouTube Download
 
-Download YouTube subtitles in **RAW TXT**, **clean TXT**, **SRT**, or **VTT**. Browse creator-provided and YouTube-generated tracks by language. When a video has no caption tracks, download its audio and transcribe it locally with **whisper.cpp `ggml-large-v3-turbo.bin`**. The same command can save the video's audio as MP3 or M4A, or save an MP4 video.
+Save YouTube subtitles in any available language as RAW text, clean text, SRT or VTT. Download the video's audio or video too. If a video has no subtitles, transcribe it on your Mac with [whisper.cpp](https://github.com/ggml-org/whisper.cpp) and the `large-v3-turbo` model.
 
-This extension uses a native Raycast list and actions. It does not call DownSub or send audio to a transcription service.
+- **Copy a link, open the command.** A YouTube link in your clipboard loads right away, with no extra steps.
+- **See what you're downloading.** The video's thumbnail and title appear as soon as the link is recognized.
+- **Every subtitle track.** Creator subtitles, YouTube's automatic captions, and auto-translations are all listed.
+- **Your languages first.** Favorite languages are listed at the top, and `serbian`, `Serbian` and `serbian (orig)` all match the same language.
+- **Audio and video.** Save MP3, M4A or MP4 in the best available quality.
+- **Local transcription.** Audio is never uploaded to a transcription service.
 
-## Install locally
+## Requirements
 
-Requirements: Raycast, macOS, Node.js, `yt-dlp`, and `ffmpeg`. Install the latter two with Homebrew:
+| Tool                                                           | Needed for                                      | Install                                       |
+| -------------------------------------------------------------- | ----------------------------------------------- | --------------------------------------------- |
+| [yt-dlp](https://github.com/yt-dlp/yt-dlp)                     | Everything                                      | `brew install yt-dlp`                         |
+| [ffmpeg](https://ffmpeg.org)                                   | MP3, M4A, MP4, and transcription                | `brew install ffmpeg`                         |
+| [whisper.cpp](https://github.com/ggml-org/whisper.cpp) + model | Transcribing videos that have no subtitles only | [Set up transcription](#set-up-transcription) |
 
 ```sh
 brew install yt-dlp ffmpeg
 ```
 
-Then clone this repository and run:
+The extension finds these tools in your `PATH`, `/opt/homebrew/bin`, or `/usr/local/bin`. If yours are elsewhere, set their paths in the extension preferences.
+
+## How to use it
+
+1. Copy a YouTube link.
+2. Open **YouTube Download**. The link is placed in the search bar and the video starts loading.
+3. Check the thumbnail and title in the side panel.
+4. Choose a subtitle format from the dropdown (⌘P). **RAW** is selected by default.
+5. Select a language and press ↵.
+
+Files are saved to `~/Downloads` unless you choose another folder in the preferences.
+
+Already opened the command? Paste a link with ⌘V and it loads immediately, replacing the current video.
+
+| Key  | Action                                                                                                   |
+| ---- | -------------------------------------------------------------------------------------------------------- |
+| ↵    | Download the selected language in the chosen format, or the selected audio/video format                  |
+| ⌘P   | Choose the subtitle format                                                                               |
+| ⌘K   | More actions: other subtitle formats, Show Last File in Finder, Edit Favorite Languages, and preferences |
+| Type | Filter the list, for example `english` or `mp3`                                                          |
+| ⌘V   | Paste a YouTube link and load it                                                                         |
+| Esc  | Clear the search bar; press again to close                                                               |
+
+### Supported links
+
+YouTube `watch`, `youtu.be`, Shorts, Live and embed links, including `m.youtube.com` and `music.youtube.com`, with or without `https://`. Playlist and timestamp parameters are ignored; each search loads one video.
+
+Links typed by hand, or from other sites [supported by yt-dlp](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md), show **Search This Link**. Press ↵ to load them.
+
+## Subtitles
+
+| Format                   | File        | What you get                                                                                                                                |
+| ------------------------ | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| **RAW · TXT (all cues)** | `- RAW.txt` | The text of every caption cue in order, without timestamps. Automatic captions repeat each line as it scrolls, and RAW keeps those repeats. |
+| **Clean TXT**            | `.txt`      | Readable plain text with the scrolling repeats removed.                                                                                     |
+| **SRT**                  | `.srt`      | Timed subtitles for video players and editors. Empty cues are removed and the rest renumbered.                                              |
+| **VTT**                  | `.vtt`      | Timed WebVTT subtitles as YouTube provides them.                                                                                            |
+
+Rows marked **Creator** are subtitles uploaded by the channel. Rows marked **Automatic** are YouTube's speech recognition and machine translations. **(Original)** marks automatic captions in the video's spoken language.
+
+Files are named `Video Title [videoId] - language.srt`, with `- auto` for automatic captions and `- RAW` for RAW exports. If a file with the same name exists, a number is added.
+
+### Favorite languages
+
+Press ⌘K, choose **Edit Favorite Languages**, and enter names or codes separated by commas, for example `Serbian, English, de`. Matching ignores capitalization and `(orig)`, so `serbian`, `Serbian` and `serbian (orig)` all find Serbian. Matches appear in **Favorite Languages** at the top. If nothing matches exactly, the closest languages appear in **Suggested Languages**.
+
+## Audio and video
+
+| Format  | Quality                                                    |
+| ------- | ---------------------------------------------------------- |
+| **MP3** | Best available audio, converted at the highest MP3 quality |
+| **M4A** | Best available audio, saved as M4A                         |
+| **MP4** | Best available video with audio, saved as MP4              |
+
+Files are named `Video Title [videoId].mp3`, `.m4a` or `.mp4`. Progress is shown on the row while it downloads.
+
+## Transcribe videos without subtitles
+
+If a video has no creator subtitles and no automatic captions, the list shows **Transcribe with Whisper**. The extension downloads the audio to a temporary folder, converts it to 16 kHz mono WAV, and runs whisper.cpp with the `ggml-large-v3-turbo.bin` model. It saves three files: `Video Title [videoId] - whisper-Serbian.srt`, `.vtt` and `.txt`. Temporary audio is deleted afterwards.
+
+### Set up transcription
+
+The model is about 1.6 GB and is not included with the extension. Its file must be named `ggml-large-v3-turbo.bin`.
+
+**Option 1: Homebrew**
 
 ```sh
-npm install
-npm run dev
+brew install whisper.cpp
+mkdir -p ~/whisper-models
+curl -L -o ~/whisper-models/ggml-large-v3-turbo.bin \
+  https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin
 ```
 
-Open **YouTube Download** under Raycast's Development section. The search bar is the link field. If your clipboard already holds a YouTube watch, short, live, embed, or `youtu.be` link, the command puts it in the search bar and searches right away. Pasting a YouTube link with ⌘V also searches right away, replacing the current video. Typed links and links to other sites supported by `yt-dlp` show **Search This Link**; press Return to search them. The results appear at once with the video's thumbnail and title in a side panel, so you can confirm it is the right video while the caption list loads. The channel, duration, upload date, and details of the selected row are listed below the title. Type text that is not a link, such as `serbian` or `mp3`, to filter the results. Esc clears the search bar, and a second Esc closes the command. Use the format selector above the language list, then press Return on a language to save it. RAW is the default: it saves caption text in its original cue order, including repeated rolling cues, as a file ending `- RAW.txt`. Clean TXT removes repeated rolling text. SRT and VTT keep timestamps. To download the same video's media, choose MP3, M4A, or MP4 in the **Audio & Video** section. Files are saved to `~/Downloads` by default; you can choose another folder in extension preferences. Existing files are given a numeric suffix.
+In the extension preferences, set **Large V3 Turbo Model** by selecting `ggml-large-v3-turbo.bin` in your `whisper-models` folder. `whisper-cli` is found automatically.
 
-Choose **Edit Favorite Languages** from any row's actions (⌘K) and enter a comma-separated text value such as `Serbian, English, sr`. The extension remembers the saved value; extension preferences provide its initial default. Matching ignores capitalization and `(orig)` / `-orig`, so `Serbian`, `serbian`, and `serbian (orig)` find the same language. Matching tracks appear first. If there is no direct match, close fuzzy matches appear in **Suggested Languages**.
-
-## Enable local Whisper transcription
-
-Whisper is only offered if the inspected video has no creator or automatic captions. Build `whisper.cpp` on each machine and download the required model:
+**Option 2: build from source**
 
 ```sh
-git clone https://github.com/ggml-org/whisper.cpp.git
-cd whisper.cpp
+git clone https://github.com/ggml-org/whisper.cpp.git ~/GitHub/whisper.cpp
+cd ~/GitHub/whisper.cpp
 cmake -B build
 cmake --build build --config Release
 sh ./models/download-ggml-model.sh large-v3-turbo
 ```
 
-In Raycast extension preferences, set:
+A checkout at `~/GitHub/whisper.cpp` is found automatically. For a checkout elsewhere, set **whisper.cpp CLI** to its `build/bin/whisper-cli`; the model in its `models` folder is then found automatically.
 
-- **whisper.cpp CLI** to the absolute path of `build/bin/whisper-cli`.
-- **Large V3 Turbo Model** to the absolute path of `models/ggml-large-v3-turbo.bin`.
-- **Transcription Language** to `Serbian`, `auto`, or another language supported by whisper.cpp. The default is `Serbian`.
+Set **Transcription Language** to the language spoken in the video, for example `Serbian`, `English` or `auto`. The default is `Serbian`.
 
-If your checkout is at `~/GitHub/whisper.cpp` with the CLI and model in the paths above, the extension finds them automatically. The preferences let other machines use their own installation paths.
+## Preferences
 
-The extension downloads audio to a temporary directory, converts it with `ffmpeg` to mono 16 kHz WAV, then runs the configured CLI with that exact model. It saves SRT, VTT, and TXT files together in the download folder. Temporary audio is removed after the job finishes. MP3 and M4A downloads are separate actions if you want to keep the audio.
+| Preference                     | Default             | Description                                                        |
+| ------------------------------ | ------------------- | ------------------------------------------------------------------ |
+| **Download Folder**            | `~/Downloads`       | Where subtitles, audio, video and transcriptions are saved         |
+| **yt-dlp Executable**          | Found automatically | Path to `yt-dlp`                                                   |
+| **ffmpeg Executable**          | Found automatically | Path to `ffmpeg`                                                   |
+| **whisper.cpp CLI**            | Found automatically | Path to `whisper-cli`                                              |
+| **Large V3 Turbo Model**       | Next to whisper.cpp | Path to `ggml-large-v3-turbo.bin`                                  |
+| **Transcription Language**     | `Serbian`           | Spoken language passed to whisper.cpp, or `auto`                   |
+| **Favorite Caption Languages** | `Serbian`           | Starting value for favorite languages, until you edit them with ⌘K |
 
-Each machine needs its own `yt-dlp`, `ffmpeg`, whisper.cpp CLI, and model. The 1.5 GB model is deliberately not included in the extension package. `yt-dlp` and `ffmpeg` are found from `PATH` or common Homebrew locations, or can be selected explicitly in preferences.
+## Troubleshooting
 
-## Build and publish
+**"yt-dlp was not found" or "ffmpeg was not found".** Install them with `brew install yt-dlp ffmpeg`, or set their paths in the preferences.
+
+**A video won't load or download.** YouTube changes often, so update yt-dlp first with `brew upgrade yt-dlp`. Private, members-only and some age-restricted videos may not work, because the extension doesn't use your browser's sign-in.
+
+**"HTTP Error 429" on automatic captions.** YouTube is rate limiting requests, which happens most with auto-translated languages. The extension retries once after 60 seconds. If it still fails, wait a few minutes, or use a creator track or the original-language track.
+
+**Transcribe with Whisper is not shown.** It only appears for videos with no subtitles of any kind. For videos that have captions, download a caption track instead.
+
+**"ggml-large-v3-turbo.bin was not found".** Set **Large V3 Turbo Model** to the model file, and make sure the file name is exactly `ggml-large-v3-turbo.bin`.
+
+## Privacy
+
+Everything runs on your Mac. The extension talks only to YouTube, or the site you search, to read video details, thumbnails and subtitles. Audio, video and transcripts never leave your computer.
+
+## Development
 
 ```sh
-npm run build
+npm install
+npm run dev    # load the extension in Raycast
+npm test
 npm run lint
-npm run publish
 ```
 
-Raycast's publishing command opens a contribution pull request in the Raycast extensions repository. The `author` field in `package.json` must match the publisher's Raycast Store handle. The current value is `davidrosic`; change it if your Raycast username differs. The repository includes `package-lock.json` and a 512×512 icon for review.
-
-## Notes
-
-- The extension handles a **single YouTube video** per invocation. Playlist parameters are ignored.
-- Available languages depend on tracks returned by YouTube through `yt-dlp`. YouTube-generated and translated caption tracks may be numerous. This extension does not create new translations.
-- If YouTube rate limits an automatic caption, the extension retries once after a 60-second subtitle delay. YouTube may still refuse some translated tracks.
-- RAW and clean TXT are both readable `.txt` files. RAW keeps all caption cues, while clean TXT removes adjacent and rolling repetitions. SRT prefers a native SRT track and removes empty cues; VTT preserves timed captions.
-- Audio and video actions choose the best quality available for their selected format. MP3 uses the highest quality audio conversion setting.
-- A private, unavailable, or restricted video may require authentication or may be blocked by YouTube. Update `yt-dlp` when YouTube changes its extraction behavior.
+`npm run publish` opens a pull request to the Raycast Store. The `author` field in `package.json` must be your Raycast Store username.
