@@ -82,56 +82,37 @@ function escapeMarkdown(text: string): string {
   return text.replace(/[\\`*_[\]<>~#]/g, "\\$&");
 }
 
-/** Thumbnail, title and video facts, followed by details about the selected item. */
+/** Thumbnail and title first, with video facts and item details listed well below them. */
 export function videoDetail(
-  { video, preview, error }: VideoState,
+  { video, preview, error }: Pick<VideoState, "video" | "preview" | "error">,
   details: { title: string; text: string }[] = [],
 ) {
   const thumbnail = video?.thumbnail || preview.thumbnail;
   const title = video?.title || preview.title;
   const channel = video?.channel || preview.channel;
+  const facts = [
+    ...(channel ? [{ title: "Channel", text: channel }] : []),
+    ...(video?.duration !== undefined
+      ? [{ title: "Duration", text: formatDuration(video.duration) }]
+      : []),
+    ...(video?.uploadDate
+      ? [{ title: "Uploaded", text: video.uploadDate }]
+      : []),
+    ...details,
+  ];
   const markdown = [
     thumbnail &&
       `![Thumbnail](${thumbnail.replace(/[()\s]/g, (character) => `%${character.charCodeAt(0).toString(16).padStart(2, "0")}`)})`,
     title ? `## ${escapeMarkdown(title)}` : !error && "Loading video details…",
     error && `**Could not inspect video:** ${escapeMarkdown(error)}`,
+    facts.length > 0 && "---",
+    facts
+      .map((fact) => `- **${fact.title}:** ${escapeMarkdown(fact.text)}`)
+      .join("\n"),
   ]
     .filter(Boolean)
     .join("\n\n");
-  return (
-    <List.Item.Detail
-      markdown={markdown}
-      metadata={
-        <List.Item.Detail.Metadata>
-          {channel && (
-            <List.Item.Detail.Metadata.Label title="Channel" text={channel} />
-          )}
-          {video?.duration !== undefined && (
-            <List.Item.Detail.Metadata.Label
-              title="Duration"
-              text={formatDuration(video.duration)}
-            />
-          )}
-          {video?.uploadDate && (
-            <List.Item.Detail.Metadata.Label
-              title="Uploaded"
-              text={video.uploadDate}
-            />
-          )}
-          {details.length > 0 && (channel || video) && (
-            <List.Item.Detail.Metadata.Separator />
-          )}
-          {details.map((detail) => (
-            <List.Item.Detail.Metadata.Label
-              key={detail.title}
-              title={detail.title}
-              text={detail.text}
-            />
-          ))}
-        </List.Item.Detail.Metadata>
-      }
-    />
-  );
+  return <List.Item.Detail markdown={markdown} />;
 }
 
 /**
