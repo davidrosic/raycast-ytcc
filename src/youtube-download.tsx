@@ -20,12 +20,12 @@ import {
   Settings,
   downloadCaption,
   downloadMedia,
-  favoriteLanguageTerms,
   favoriteScore,
   inspectMedia,
   isYoutubeUrl,
   languageLabel,
   mediaUrl,
+  rankFavorites,
   transcribe,
   youtubeThumbnail,
 } from "./core";
@@ -195,36 +195,16 @@ export default function Command() {
       matches(languageLabel(caption.language), caption.language) ||
       favoriteScore(caption, filter) >= 60,
   );
-  const favoriteTerms = favoriteLanguageTerms(favoriteLanguages);
-  const ranked = captions.map((caption) => ({
-    caption,
-    score: Math.max(
-      0,
-      ...favoriteTerms.map((term) => favoriteScore(caption, term)),
+  const { favorites, suggestions } = rankFavorites(
+    [...captions].sort(
+      (a, b) =>
+        Number(b.kind === "manual") - Number(a.kind === "manual") ||
+        Number(/orig/i.test(b.language)) - Number(/orig/i.test(a.language)) ||
+        languageLabel(a.language).localeCompare(languageLabel(b.language)),
     ),
-  }));
-  const byPreference = (
-    a: (typeof ranked)[number],
-    b: (typeof ranked)[number],
-  ) =>
-    b.score - a.score ||
-    Number(b.caption.kind === "manual") - Number(a.caption.kind === "manual") ||
-    Number(/orig/i.test(b.caption.language)) -
-      Number(/orig/i.test(a.caption.language)) ||
-    languageLabel(a.caption.language).localeCompare(
-      languageLabel(b.caption.language),
-    );
-  const favorites = ranked
-    .filter((item) => item.score >= 60)
-    .sort(byPreference)
-    .map((item) => item.caption);
-  const suggestions = favorites.length
-    ? []
-    : ranked
-        .filter((item) => item.score >= 30)
-        .sort(byPreference)
-        .slice(0, 5)
-        .map((item) => item.caption);
+    (caption) => [caption.language, languageLabel(caption.language)],
+    favoriteLanguages,
+  );
   const featured = new Set([...favorites, ...suggestions]);
   const manual = captions.filter(
     (caption) => caption.kind === "manual" && !featured.has(caption),

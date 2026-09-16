@@ -179,12 +179,11 @@ export function favoriteLanguageTerms(value?: string): string[] {
     .filter(Boolean);
 }
 
-export function favoriteScore(caption: Caption, term: string): number {
+/** Fuzzy score from 0 to 100 for how well a typed language matches any of a language's names. */
+export function languageScore(names: string[], term: string): number {
   const query = normalizeLanguage(term);
   if (!query) return 0;
-  const candidates = [caption.language, languageLabel(caption.language)].map(
-    normalizeLanguage,
-  );
+  const candidates = names.map(normalizeLanguage);
   let score = 0;
   for (const candidate of candidates) {
     if (candidate === query) score = Math.max(score, 100);
@@ -216,6 +215,45 @@ export function favoriteScore(caption: Caption, term: string): number {
     }
   }
   return score;
+}
+
+export function favoriteScore(caption: Caption, term: string): number {
+  return languageScore(
+    [caption.language, languageLabel(caption.language)],
+    term,
+  );
+}
+
+/**
+ * Items matching the favorite languages, best match first. When nothing matches
+ * well, up to five close matches are returned as suggestions instead.
+ * Items with equal scores keep their original order.
+ */
+export function rankFavorites<T>(
+  items: T[],
+  names: (item: T) => string[],
+  favoriteLanguages?: string,
+): { favorites: T[]; suggestions: T[] } {
+  const terms = favoriteLanguageTerms(favoriteLanguages);
+  const ranked = items
+    .map((item) => ({
+      item,
+      score: Math.max(
+        0,
+        ...terms.map((term) => languageScore(names(item), term)),
+      ),
+    }))
+    .sort((a, b) => b.score - a.score);
+  const favorites = ranked
+    .filter((entry) => entry.score >= 60)
+    .map((entry) => entry.item);
+  const suggestions = favorites.length
+    ? []
+    : ranked
+        .filter((entry) => entry.score >= 30)
+        .slice(0, 5)
+        .map((entry) => entry.item);
+  return { favorites, suggestions };
 }
 
 export function parseVideo(data: unknown, url: string): Video {

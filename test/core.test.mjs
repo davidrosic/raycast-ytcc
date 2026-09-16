@@ -95,6 +95,27 @@ test("favorite language text matches case and original-caption variants", () => 
   ]);
 });
 
+test("ranks favorite language matches first and suggests close matches", () => {
+  const languages = [
+    { code: "en", name: "English" },
+    { code: "sr", name: "Serbian" },
+    { code: "hr", name: "Croatian" },
+  ];
+  const names = (language) => [language.code, language.name];
+  assert.deepEqual(
+    core
+      .rankFavorites(languages, names, "croatian, serbian (orig)")
+      .favorites.map((language) => language.code),
+    ["sr", "hr"],
+  );
+  const fuzzy = core.rankFavorites(languages, names, "srbian");
+  assert.deepEqual(fuzzy.favorites, []);
+  assert.deepEqual(
+    fuzzy.suggestions.map((language) => language.code),
+    ["sr"],
+  );
+});
+
 test("identifies creator and automatic language tracks and ignores live chat", () => {
   const video = core.parseVideo(
     {
