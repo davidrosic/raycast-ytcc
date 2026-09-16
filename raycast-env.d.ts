@@ -1,0 +1,41 @@
+/// <reference types="@raycast/api">
+
+/* 🚧 🚧 🚧
+ * This file is auto-generated from the extension's manifest.
+ * Do not modify manually. Instead, update the `package.json` file.
+ * 🚧 🚧 🚧 */
+
+/* eslint-disable @typescript-eslint/ban-types */
+
+type ExtensionPreferences = {
+  /** Download Folder - Where subtitle files are saved */
+  "downloadDirectory"?: string,
+  /** yt-dlp Executable - Optional; otherwise found in PATH or common Homebrew locations */
+  "ytDlpPath"?: string,
+  /** ffmpeg Executable - Needed for audio conversion, MP4 merging, and Whisper transcription */
+  "ffmpegPath"?: string,
+  /** whisper.cpp CLI - Path to whisper-cli; auto-detected in ~/GitHub/whisper.cpp when available */
+  "whisperPath"?: string,
+  /** Large V3 Turbo Model - Path to ggml-large-v3-turbo.bin; auto-detected beside whisper.cpp when available */
+  "modelPath"?: string,
+  /** Transcription Language - Spoken language, for example Serbian or auto */
+  "whisperLanguage": string
+}
+
+/** Preferences accessible in all the extension's commands */
+declare type Preferences = ExtensionPreferences
+
+declare namespace Preferences {
+  /** Preferences accessible in the `download-subtitles` command */
+  export type DownloadSubtitles = ExtensionPreferences & {}
+  /** Preferences accessible in the `download-media` command */
+  export type DownloadMedia = ExtensionPreferences & {}
+}
+
+declare namespace Arguments {
+  /** Arguments passed to the `download-subtitles` command */
+  export type DownloadSubtitles = {}
+  /** Arguments passed to the `download-media` command */
+  export type DownloadMedia = {}
+}
+
