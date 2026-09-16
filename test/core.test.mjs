@@ -159,7 +159,7 @@ test("ranks favorite language matches first and suggests close matches", () => {
     core
       .rankFavorites(languages, names, "croatian, serbian (orig)")
       .favorites.map((language) => language.code),
-    ["sr", "hr"],
+    ["hr", "sr"],
   );
   const fuzzy = core.rankFavorites(languages, names, "srbian");
   assert.deepEqual(fuzzy.favorites, []);

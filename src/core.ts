@@ -398,9 +398,9 @@ export function favoriteScore(caption: Caption, term: string): number {
 }
 
 /**
- * Items matching the favorite languages, best match first. When nothing matches
- * well, up to five close matches are returned as suggestions instead.
- * Items with equal scores keep their original order.
+ * Items matching the favorite languages, in the order the favorites were
+ * written and best match first. When nothing matches well, up to five close
+ * matches are returned as suggestions instead. Ties keep the items' order.
  */
 export function rankFavorites<T>(
   items: T[],
@@ -408,22 +408,27 @@ export function rankFavorites<T>(
   favoriteLanguages?: string,
 ): { favorites: T[]; suggestions: T[] } {
   const terms = favoriteLanguageTerms(favoriteLanguages);
-  const ranked = items
-    .map((item) => ({
-      item,
-      score: Math.max(
-        0,
-        ...terms.map((term) => languageScore(names(item), term)),
-      ),
-    }))
-    .sort((a, b) => b.score - a.score);
+  const ranked = items.map((item) => {
+    let score = 0;
+    let term = terms.length;
+    terms.forEach((value, index) => {
+      const match = languageScore(names(item), value);
+      if (match > score) {
+        score = match;
+        term = index;
+      }
+    });
+    return { item, score, term };
+  });
   const favorites = ranked
     .filter((entry) => entry.score >= 60)
+    .sort((a, b) => a.term - b.term || b.score - a.score)
     .map((entry) => entry.item);
   const suggestions = favorites.length
     ? []
     : ranked
         .filter((entry) => entry.score >= 30)
+        .sort((a, b) => b.score - a.score)
         .slice(0, 5)
         .map((entry) => entry.item);
   return { favorites, suggestions };
