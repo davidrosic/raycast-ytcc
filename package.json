@@ -71,6 +71,14 @@
       "type": "textfield",
       "default": "Serbian",
       "required": false
+    },
+    {
+      "name": "favoriteLanguages",
+      "title": "Favorite Caption Languages",
+      "description": "Comma-separated language names or codes; case and '(orig)' are ignored (for example Serbian, English)",
+      "type": "textfield",
+      "default": "Serbian",
+      "required": false
     }
   ],
   "scripts": {

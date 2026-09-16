@@ -34,6 +34,7 @@ export type Settings = {
   whisperPath?: string;
   modelPath?: string;
   whisperLanguage?: string;
+  favoriteLanguages?: string;
 };
 
 export function youtubeUrl(input: string): string {
@@ -92,6 +93,62 @@ export function languageLabel(code: string): string {
   } catch {
     return code;
   }
+}
+
+export function normalizeLanguage(value: string): string {
+  return value
+    .normalize("NFKD")
+    .replace(/\p{M}/gu, "")
+    .replace(/(?:\s*\((?:orig|original)\)|[-_](?:orig|original))\s*$/i, "")
+    .toLocaleLowerCase("en")
+    .replace(/[^\p{L}\p{N}]+/gu, "")
+    .trim();
+}
+
+export function favoriteLanguageTerms(value?: string): string[] {
+  return (value || "")
+    .split(/[,;\n]+/)
+    .map((term) => term.trim())
+    .filter(Boolean);
+}
+
+export function favoriteScore(caption: Caption, term: string): number {
+  const query = normalizeLanguage(term);
+  if (!query) return 0;
+  const candidates = [caption.language, languageLabel(caption.language)].map(
+    normalizeLanguage,
+  );
+  let score = 0;
+  for (const candidate of candidates) {
+    if (candidate === query) score = Math.max(score, 100);
+    else if (candidate.startsWith(query) && query.length >= 3)
+      score = Math.max(score, 80);
+    else if (candidate.includes(query) && query.length >= 4)
+      score = Math.max(score, 60);
+    else {
+      let offset = 0;
+      let first = -1;
+      let last = -1;
+      for (const character of query) {
+        const position = candidate.indexOf(character, offset);
+        if (position < 0) {
+          last = -1;
+          break;
+        }
+        if (first < 0) first = position;
+        last = position;
+        offset = position + 1;
+      }
+      if (last >= 0 && query.length >= 4) {
+        const gaps = last - first + 1 - query.length;
+        score = Math.max(
+          score,
+          Math.max(1, 40 - gaps * 3 - first + (first === 0 ? 8 : 0)),
+        );
+      }
+    }
+  }
+  return score;
 }
 
 export function parseVideo(data: unknown, url: string): Video {

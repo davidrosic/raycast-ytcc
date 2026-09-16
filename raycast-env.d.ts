@@ -19,7 +19,9 @@ type ExtensionPreferences = {
   /** Large V3 Turbo Model - Path to ggml-large-v3-turbo.bin; auto-detected beside whisper.cpp when available */
   "modelPath"?: string,
   /** Transcription Language - Spoken language, for example Serbian or auto */
-  "whisperLanguage": string
+  "whisperLanguage": string,
+  /** Favorite Caption Languages - Comma-separated language names or codes; case and '(orig)' are ignored (for example Serbian, English) */
+  "favoriteLanguages": string
 }
 
 /** Preferences accessible in all the extension's commands */

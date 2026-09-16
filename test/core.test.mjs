@@ -46,6 +46,25 @@ test("shows readable language names for caption selection", () => {
   assert.equal(core.languageLabel("sr-orig"), "Serbian (Original)");
 });
 
+test("favorite language text matches case and original-caption variants", () => {
+  const tracks = ["sr", "sr-orig", "serbian (orig)"].map((language) => ({
+    language,
+    kind: "automatic",
+    formats: ["vtt"],
+  }));
+  for (const track of tracks) {
+    assert.equal(core.favoriteScore(track, "Serbian"), 100);
+    assert.equal(core.favoriteScore(track, "serbian (orig)"), 100);
+  }
+  assert.ok(core.favoriteScore(tracks[0], "srbn") >= 30);
+  assert.deepEqual(core.favoriteLanguageTerms("Serbian, English;de\nfr"), [
+    "Serbian",
+    "English",
+    "de",
+    "fr",
+  ]);
+});
+
 test("identifies creator and automatic language tracks and ignores live chat", () => {
   const video = core.parseVideo(
     {

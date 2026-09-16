@@ -20,6 +20,8 @@ import {
   Video,
   downloadCaption,
   downloadMedia,
+  favoriteLanguageTerms,
+  favoriteScore,
   inspect,
   languageLabel,
   transcribe,
@@ -49,13 +51,16 @@ export default function Command() {
   const { push } = useNavigation();
   const settings = getPreferenceValues<Settings>();
 
-  async function submit() {
+  async function submit(values: { favoriteLanguages: string }) {
     setLoading(true);
     try {
       push(
         <CaptionList
           video={await inspect(url, settings)}
-          settings={settings}
+          settings={{
+            ...settings,
+            favoriteLanguages: values.favoriteLanguages,
+          }}
         />,
       );
     } catch (error) {
@@ -86,6 +91,14 @@ export default function Command() {
         value={url}
         onChange={setUrl}
         autoFocus
+      />
+      <Form.TextField
+        id="favoriteLanguages"
+        title="Favorite Languages"
+        placeholder="Serbian, English"
+        defaultValue={settings.favoriteLanguages || ""}
+        storeValue
+        info="Comma-separated names or codes. Matches ignore case and (orig)."
       />
       <Form.Description text="Browse creator captions and YouTube automatic captions in every available language. Videos without captions can be transcribed locally." />
     </Form>
@@ -193,9 +206,42 @@ function CaptionList({
     }
   }
 
-  const manual = video.captions.filter((caption) => caption.kind === "manual");
+  const favoriteTerms = favoriteLanguageTerms(settings.favoriteLanguages);
+  const ranked = video.captions.map((caption) => ({
+    caption,
+    score: Math.max(
+      0,
+      ...favoriteTerms.map((term) => favoriteScore(caption, term)),
+    ),
+  }));
+  const byPreference = (
+    a: (typeof ranked)[number],
+    b: (typeof ranked)[number],
+  ) =>
+    b.score - a.score ||
+    Number(b.caption.kind === "manual") - Number(a.caption.kind === "manual") ||
+    Number(/orig/i.test(b.caption.language)) -
+      Number(/orig/i.test(a.caption.language)) ||
+    languageLabel(a.caption.language).localeCompare(
+      languageLabel(b.caption.language),
+    );
+  const favorites = ranked
+    .filter((item) => item.score >= 60)
+    .sort(byPreference)
+    .map((item) => item.caption);
+  const suggestions = favorites.length
+    ? []
+    : ranked
+        .filter((item) => item.score >= 30)
+        .sort(byPreference)
+        .slice(0, 5)
+        .map((item) => item.caption);
+  const featured = new Set([...favorites, ...suggestions]);
+  const manual = video.captions.filter(
+    (caption) => caption.kind === "manual" && !featured.has(caption),
+  );
   const automatic = video.captions.filter(
-    (caption) => caption.kind === "automatic",
+    (caption) => caption.kind === "automatic" && !featured.has(caption),
   );
   const item = (caption: Caption) => (
     <List.Item
@@ -294,6 +340,22 @@ function CaptionList({
           />
         )}
       </List.Section>
+      {favorites.length > 0 && (
+        <List.Section
+          title="Favorite Languages"
+          subtitle={settings.favoriteLanguages}
+        >
+          {favorites.map(item)}
+        </List.Section>
+      )}
+      {suggestions.length > 0 && (
+        <List.Section
+          title="Suggested Languages"
+          subtitle="Closest matches to your favorites"
+        >
+          {suggestions.map(item)}
+        </List.Section>
+      )}
       <List.Section title="Audio & Video">
         <List.Item
           title="Download MP3"
