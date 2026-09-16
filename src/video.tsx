@@ -8,6 +8,7 @@ import {
   fetchPreview,
   formatDuration,
   isYoutubeUrl,
+  pastedFilePath,
   pastedYoutubeLink,
   youtubeThumbnail,
 } from "./core";
@@ -89,29 +90,25 @@ function escapeMarkdown(text: string): string {
   return text.replace(/[\\`*_[\]<>~#]/g, "\\$&");
 }
 
-/** Thumbnail and title first, with video facts and item details listed well below them. */
-export function videoDetail(
-  { video, preview, error }: Pick<VideoState, "video" | "preview" | "error">,
-  details: { title: string; text: string }[] = [],
-) {
-  const thumbnail = video?.thumbnail || preview.thumbnail;
-  const title = video?.title || preview.title;
-  const channel = video?.channel || preview.channel;
-  const facts = [
-    ...(channel ? [{ title: "Channel", text: channel }] : []),
-    ...(video?.duration !== undefined
-      ? [{ title: "Duration", text: formatDuration(video.duration) }]
-      : []),
-    ...(video?.uploadDate
-      ? [{ title: "Uploaded", text: video.uploadDate }]
-      : []),
-    ...details,
-  ];
-  const markdown = [
-    thumbnail &&
-      `![Thumbnail](${thumbnail.replace(/[()\s]/g, (character) => `%${character.charCodeAt(0).toString(16).padStart(2, "0")}`)})`,
-    title ? `## ${escapeMarkdown(title)}` : !error && "Loading video details…",
-    error && `**Could not inspect video:** ${escapeMarkdown(error)}`,
+type Fact = { title: string; text: string };
+
+/** Detail markdown: an optional image and title first, with facts listed well below them. */
+export function detailMarkdown({
+  image,
+  title,
+  note,
+  facts = [],
+}: {
+  image?: string;
+  title?: string;
+  note?: string;
+  facts?: Fact[];
+}): string {
+  return [
+    image &&
+      `![Thumbnail](${image.replace(/[()\s]/g, (character) => `%${character.charCodeAt(0).toString(16).padStart(2, "0")}`)})`,
+    title && `## ${escapeMarkdown(title)}`,
+    note,
     facts.length > 0 && "---",
     facts
       .map((fact) => `- **${fact.title}:** ${escapeMarkdown(fact.text)}`)
@@ -119,14 +116,46 @@ export function videoDetail(
   ]
     .filter(Boolean)
     .join("\n\n");
+}
+
+/** Thumbnail and title first, with video facts and item details listed well below them. */
+export function videoDetail(
+  { video, preview, error }: Pick<VideoState, "video" | "preview" | "error">,
+  details: Fact[] = [],
+) {
+  const channel = video?.channel || preview.channel;
+  const title = video?.title || preview.title;
+  const markdown = detailMarkdown({
+    image: video?.thumbnail || preview.thumbnail,
+    title,
+    note: error
+      ? `**Could not inspect video:** ${escapeMarkdown(error)}`
+      : title
+        ? undefined
+        : "Loading video details…",
+    facts: [
+      ...(channel ? [{ title: "Channel", text: channel }] : []),
+      ...(video?.duration !== undefined
+        ? [{ title: "Duration", text: formatDuration(video.duration) }]
+        : []),
+      ...(video?.uploadDate
+        ? [{ title: "Uploaded", text: video.uploadDate }]
+        : []),
+      ...details,
+    ],
+  });
   return <List.Item.Detail markdown={markdown} />;
 }
 
 /**
  * Search text that doubles as the link field: a YouTube link in the clipboard is
- * searched on launch, and pasting a YouTube link searches it right away.
+ * searched on launch, pasting a YouTube link searches it right away, and pasting
+ * a file path calls onFile.
  */
-export function useLinkSearch(onLink: (link: string) => void) {
+export function useLinkSearch(
+  onLink: (link: string) => void,
+  onFile: (text: string) => void,
+) {
   const [text, setText] = useState("");
   const previous = useRef("");
 
@@ -147,9 +176,11 @@ export function useLinkSearch(onLink: (link: string) => void) {
     text,
     onChange(next: string) {
       const link = pastedYoutubeLink(previous.current, next);
-      previous.current = link ?? next;
-      setText(link ?? next);
+      const file = link ? undefined : pastedFilePath(previous.current, next);
+      previous.current = link ?? file ?? next;
+      setText(previous.current);
       if (link) onLink(link);
+      else if (file) onFile(file);
     },
   };
 }

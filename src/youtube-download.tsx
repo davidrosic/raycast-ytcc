@@ -12,7 +12,8 @@ import {
   showToast,
   useNavigation,
 } from "@raycast/api";
-import { useEffect, useState } from "react";
+import { basename, dirname } from "node:path";
+import { useEffect, useMemo, useState } from "react";
 import {
   Caption,
   ExportFormat,
@@ -21,15 +22,22 @@ import {
   downloadCaption,
   downloadMedia,
   favoriteScore,
+  formatSize,
   inspectMedia,
   isYoutubeUrl,
   languageLabel,
+  localFileInfo,
+  localPath,
   mediaUrl,
   rankFavorites,
   transcribe,
+  transcribeFile,
+  whisperLanguageName,
+  whisperLanguages,
   youtubeThumbnail,
 } from "./core";
 import {
+  detailMarkdown,
   errorMessage,
   mediaFormats,
   useLinkSearch,
@@ -51,6 +59,11 @@ function formatTitle(format: ExportFormat): string {
   );
 }
 
+const languageNames = (language: { code: string; name: string }) => [
+  language.code,
+  language.name,
+];
+
 /** The video URL for search text that is a link, or undefined for filter text and unfinished links. */
 function typedLink(text: string): { isLink: boolean; url?: string } {
   if (!/^[a-z][a-z\d+.-]*:\/\//i.test(text) && !isYoutubeUrl(text))
@@ -63,17 +76,25 @@ function typedLink(text: string): { isLink: boolean; url?: string } {
 }
 
 export default function Command() {
+  const { push } = useNavigation();
   const settings = getPreferenceValues<Settings>();
   const [url, setUrl] = useState<string>();
   const [favoriteLanguages, setFavoriteLanguages] = useState(
     settings.favoriteLanguages ?? "",
   );
-  const search = useLinkSearch((link) => setUrl(mediaUrl(link)));
+  const search = useLinkSearch(
+    (link) => setUrl(mediaUrl(link)),
+    (text) => {
+      const path = localPath(text);
+      if (path && localFileInfo(path)?.isFile) push(transcribeForm(path));
+    },
+  );
   const state = useVideo(url, settings, inspectMedia);
   const { video, preview, error } = state;
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState("");
   const [activeMedia, setActiveMedia] = useState<MediaFormat>();
+  const [activeFile, setActiveFile] = useState<string>();
   const [lastFile, setLastFile] = useState<string>();
   const [selectedFormat, setSelectedFormat] = useState<ExportFormat>("raw");
 
@@ -183,14 +204,79 @@ export default function Command() {
     }
   }
 
+  async function transcribeLocal(
+    path: string,
+    language: string,
+    format: ExportFormat,
+  ) {
+    setBusy(true);
+    setActiveFile(path);
+    setProgress("Preparing transcription…");
+    const toast = await showToast({
+      style: Toast.Style.Animated,
+      title: `Transcribing ${basename(path)}…`,
+    });
+    try {
+      const output = await transcribeFile(
+        path,
+        language,
+        format,
+        settings,
+        (message) => {
+          setProgress(message);
+          toast.title = message;
+        },
+      );
+      setLastFile(output);
+      toast.style = Toast.Style.Success;
+      toast.title = "Transcription saved";
+      toast.message = output;
+      toast.primaryAction = {
+        title: "Show in Finder",
+        onAction: () => showInFinder(output),
+      };
+    } catch (error) {
+      toast.style = Toast.Style.Failure;
+      toast.title = "Transcription failed";
+      toast.message = errorMessage(error);
+    } finally {
+      setBusy(false);
+      setActiveFile(undefined);
+      setProgress("");
+    }
+  }
+
+  const defaultWhisperLanguage =
+    rankFavorites(whisperLanguages, languageNames, favoriteLanguages)
+      .favorites[0]?.code ??
+    rankFavorites(whisperLanguages, languageNames, settings.whisperLanguage)
+      .favorites[0]?.code ??
+    "auto";
+
+  function transcribeForm(path: string) {
+    return (
+      <TranscribeFileForm
+        path={path}
+        favoriteLanguages={favoriteLanguages}
+        defaultLanguage={defaultWhisperLanguage}
+        onTranscribe={transcribeLocal}
+      />
+    );
+  }
+
   const query = search.text.trim();
-  const link = typedLink(query);
+  const filePath = localPath(query);
+  const fileInfo = useMemo(
+    () => (filePath ? localFileInfo(filePath) : undefined),
+    [filePath],
+  );
+  const link = filePath ? { isLink: false } : typedLink(query);
   const pendingUrl = link.url !== url ? link.url : undefined;
-  const filter = link.isLink ? "" : query.toLocaleLowerCase();
+  const filter = link.isLink || filePath ? "" : query.toLocaleLowerCase();
   const matches = (...texts: string[]) =>
     !filter || texts.some((text) => text.toLocaleLowerCase().includes(filter));
 
-  const captions = (video?.captions ?? []).filter(
+  const captions = (filePath ? [] : (video?.captions ?? [])).filter(
     (caption) =>
       matches(languageLabel(caption.language), caption.language) ||
       favoriteScore(caption, filter) >= 60,
@@ -288,19 +374,19 @@ export default function Command() {
 
   return (
     <List
-      isLoading={busy || Boolean(url && !video && !error)}
-      isShowingDetail={Boolean(url || pendingUrl)}
+      isLoading={busy || Boolean(url && !video && !error && !filePath)}
+      isShowingDetail={Boolean(url || pendingUrl || filePath)}
       filtering={false}
       searchText={search.text}
       onSearchTextChange={search.onChange}
       navigationTitle={video?.title || preview.title || "YouTube Download"}
       searchBarPlaceholder={
         url
-          ? "Filter languages, or paste another YouTube link…"
-          : "Paste a YouTube link…"
+          ? "Filter languages, or paste another link or file path…"
+          : "Paste a YouTube link or a file path…"
       }
       searchBarAccessory={
-        url ? (
+        url && !filePath ? (
           <List.Dropdown
             tooltip="Caption Format"
             value={selectedFormat}
@@ -325,7 +411,7 @@ export default function Command() {
         description={
           url
             ? "Clear the search to see everything, or paste another link."
-            : "A YouTube link in your clipboard is searched when the command opens, and a pasted link is searched right away. Links from other sites: paste, then press Return."
+            : "A YouTube link in your clipboard is searched when the command opens, and a pasted link is searched right away. Links from other sites: paste, then press Return. To transcribe an audio or video file, paste its full path."
         }
         actions={<ActionPanel>{moreActions}</ActionPanel>}
       />
@@ -355,7 +441,79 @@ export default function Command() {
           }
         />
       )}
-      {url && !video && (
+      {filePath && (
+        <List.Section title="Transcribe File">
+          <List.Item
+            title={basename(filePath) || filePath}
+            subtitle={
+              (activeFile === filePath && progress) ||
+              (fileInfo?.isFile
+                ? dirname(filePath)
+                : fileInfo
+                  ? "Not a file"
+                  : "File not found")
+            }
+            icon={fileInfo?.isFile ? Icon.Microphone : Icon.Warning}
+            detail={
+              <List.Item.Detail
+                markdown={detailMarkdown(
+                  fileInfo?.isFile
+                    ? {
+                        title: basename(filePath),
+                        note: "Press ↵ to choose the spoken language and output, then ⌘↵ to transcribe. Press ⌘↵ here to transcribe with the settings below.",
+                        facts: [
+                          { title: "Folder", text: dirname(filePath) },
+                          { title: "Size", text: formatSize(fileInfo.size) },
+                          {
+                            title: "Modified",
+                            text: fileInfo.modified.toISOString().slice(0, 10),
+                          },
+                          {
+                            title: "Spoken Language",
+                            text: whisperLanguageName(defaultWhisperLanguage),
+                          },
+                          { title: "Output", text: formatTitle("raw") },
+                          { title: "Model", text: "ggml-large-v3-turbo" },
+                        ],
+                      }
+                    : {
+                        title: fileInfo ? "Not a file" : "File not found",
+                        note: "Enter the full path of an audio or video file, for example `/Users/you/Music/interview.m4a`.",
+                        facts: [{ title: "Path", text: filePath }],
+                      },
+                )}
+              />
+            }
+            actions={
+              <ActionPanel>
+                {fileInfo?.isFile && (
+                  <>
+                    <Action.Push
+                      title="Choose Language and Output"
+                      icon={Icon.Microphone}
+                      target={transcribeForm(filePath)}
+                    />
+                    <Action
+                      title={
+                        defaultWhisperLanguage === "auto"
+                          ? "Transcribe with Language Detection"
+                          : `Transcribe in ${whisperLanguageName(defaultWhisperLanguage)}`
+                      }
+                      icon={Icon.Waveform}
+                      onAction={() =>
+                        transcribeLocal(filePath, defaultWhisperLanguage, "raw")
+                      }
+                    />
+                    <Action.ShowInFinder path={filePath} />
+                  </>
+                )}
+                {moreActions}
+              </ActionPanel>
+            }
+          />
+        </List.Section>
+      )}
+      {url && !video && !filePath && (
         <List.Item
           title={error ? "Could not inspect video" : "Loading video…"}
           subtitle={error}
@@ -375,33 +533,36 @@ export default function Command() {
           }
         />
       )}
-      {video && !video.captions.length && matches("whisper transcribe") && (
-        <List.Section title="No Captions Available">
-          <List.Item
-            title="Transcribe with Whisper"
-            subtitle={progress || "Local large-v3-turbo"}
-            icon={Icon.Microphone}
-            detail={videoDetail(state, [
-              { title: "Model", text: "ggml-large-v3-turbo" },
-              {
-                title: "Spoken Language",
-                text: settings.whisperLanguage?.trim() || "Serbian",
-              },
-              { title: "Output", text: "SRT, VTT and TXT" },
-            ])}
-            actions={
-              <ActionPanel>
-                <Action
-                  title="Transcribe with Whisper"
-                  icon={Icon.Microphone}
-                  onAction={whisper}
-                />
-                {moreActions}
-              </ActionPanel>
-            }
-          />
-        </List.Section>
-      )}
+      {video &&
+        !filePath &&
+        !video.captions.length &&
+        matches("whisper transcribe") && (
+          <List.Section title="No Captions Available">
+            <List.Item
+              title="Transcribe with Whisper"
+              subtitle={progress || "Local large-v3-turbo"}
+              icon={Icon.Microphone}
+              detail={videoDetail(state, [
+                { title: "Model", text: "ggml-large-v3-turbo" },
+                {
+                  title: "Spoken Language",
+                  text: settings.whisperLanguage?.trim() || "Serbian",
+                },
+                { title: "Output", text: "SRT, VTT and TXT" },
+              ])}
+              actions={
+                <ActionPanel>
+                  <Action
+                    title="Transcribe with Whisper"
+                    icon={Icon.Microphone}
+                    onAction={whisper}
+                  />
+                  {moreActions}
+                </ActionPanel>
+              }
+            />
+          </List.Section>
+        )}
       {favorites.length > 0 && (
         <List.Section title="Favorite Languages" subtitle={favoriteLanguages}>
           {favorites.map(item)}
@@ -415,7 +576,7 @@ export default function Command() {
           {suggestions.map(item)}
         </List.Section>
       )}
-      {video && mediaItems.length > 0 && (
+      {video && !filePath && mediaItems.length > 0 && (
         <List.Section title="Audio & Video">
           {mediaItems.map(({ value, subtitle }) => (
             <List.Item
@@ -493,6 +654,91 @@ function FavoriteLanguagesForm({
         autoFocus
         info="Comma-separated names or codes. Matches ignore case and (orig)."
       />
+    </Form>
+  );
+}
+
+function TranscribeFileForm({
+  path,
+  favoriteLanguages,
+  defaultLanguage,
+  onTranscribe,
+}: {
+  path: string;
+  favoriteLanguages: string;
+  defaultLanguage: string;
+  onTranscribe: (path: string, language: string, format: ExportFormat) => void;
+}) {
+  const { pop } = useNavigation();
+  const { favorites, suggestions } = rankFavorites(
+    whisperLanguages,
+    languageNames,
+    favoriteLanguages,
+  );
+  const featured = new Set([...favorites, ...suggestions]);
+  const languageItem = (language: { code: string; name: string }) => (
+    <Form.Dropdown.Item
+      key={language.code}
+      value={language.code}
+      title={language.name}
+      keywords={[language.code]}
+    />
+  );
+  return (
+    <Form
+      navigationTitle={`Transcribe ${basename(path)}`}
+      actions={
+        <ActionPanel>
+          <Action.SubmitForm
+            title="Transcribe"
+            icon={Icon.Microphone}
+            onSubmit={(values: { language: string; format: ExportFormat }) => {
+              pop();
+              onTranscribe(path, values.language, values.format);
+            }}
+          />
+        </ActionPanel>
+      }
+    >
+      <Form.Description title="File" text={path} />
+      <Form.Dropdown
+        id="language"
+        title="Spoken Language"
+        defaultValue={defaultLanguage}
+        info="Your favorite languages are listed first."
+      >
+        {favorites.length > 0 && (
+          <Form.Dropdown.Section title="Favorite Languages">
+            {favorites.map(languageItem)}
+          </Form.Dropdown.Section>
+        )}
+        {suggestions.length > 0 && (
+          <Form.Dropdown.Section title="Suggested Languages">
+            {suggestions.map(languageItem)}
+          </Form.Dropdown.Section>
+        )}
+        <Form.Dropdown.Section title="All Languages">
+          <Form.Dropdown.Item
+            value="auto"
+            title={whisperLanguageName("auto")}
+            icon={Icon.Wand}
+          />
+          {whisperLanguages
+            .filter((language) => !featured.has(language))
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .map(languageItem)}
+        </Form.Dropdown.Section>
+      </Form.Dropdown>
+      <Form.Dropdown id="format" title="Output" defaultValue="raw">
+        {captionFormats.map((format) => (
+          <Form.Dropdown.Item
+            key={format.value}
+            value={format.value}
+            title={format.title}
+          />
+        ))}
+      </Form.Dropdown>
+      <Form.Description text="⌘↵ converts the audio to 16 kHz WAV with ffmpeg and transcribes it with whisper.cpp large-v3-turbo. The result is saved next to the file." />
     </Form>
   );
 }

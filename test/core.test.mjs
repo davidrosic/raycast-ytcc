@@ -63,6 +63,59 @@ test("detects pasted YouTube links but not typed characters", () => {
   );
 });
 
+test("reads absolute file paths from search text", () => {
+  const { homedir } = require("node:os");
+  assert.equal(core.localPath(" /Users/me/Neue.m4a "), "/Users/me/Neue.m4a");
+  assert.equal(core.localPath("~/Music/a b.mp3"), `${homedir()}/Music/a b.mp3`);
+  assert.equal(core.localPath("'/tmp/a b.wav'"), "/tmp/a b.wav");
+  assert.equal(core.localPath("/tmp/a\\ b\\ \\(1\\).m4a"), "/tmp/a b (1).m4a");
+  assert.equal(core.localPath("file:///tmp/a%20b.mp4"), "/tmp/a b.mp4");
+  assert.equal(core.localPath("Music/a.mp3"), undefined);
+  assert.equal(core.localPath("https://youtu.be/jNQXAC9IVRw"), undefined);
+  assert.equal(core.pastedFilePath("", "/tmp/a.m4a"), "/tmp/a.m4a");
+  assert.equal(core.pastedFilePath("/tmp/a.m4", "/tmp/a.m4a"), undefined);
+  assert.equal(
+    core.pastedFilePath("/Users/me/Neue.m4a", "/Users/me/Other.m4a"),
+    "/Users/me/Other.m4a",
+  );
+  assert.equal(core.pastedFilePath("", "serbian"), undefined);
+});
+
+test("recognizes WAV files whisper.cpp can read without conversion", () => {
+  const wav = (channels, sampleRate, bits, extra = 0) => {
+    const header = Buffer.alloc(44 + extra);
+    header.write("RIFF", 0, "ascii");
+    header.write("WAVE", 8, "ascii");
+    let offset = 12;
+    if (extra) {
+      header.write("LIST", offset, "ascii");
+      header.writeUInt32LE(extra - 8, offset + 4);
+      offset += extra;
+    }
+    header.write("fmt ", offset, "ascii");
+    header.writeUInt32LE(16, offset + 4);
+    header.writeUInt16LE(1, offset + 8);
+    header.writeUInt16LE(channels, offset + 10);
+    header.writeUInt32LE(sampleRate, offset + 12);
+    header.writeUInt16LE(bits, offset + 22);
+    return header;
+  };
+  assert.equal(core.isWhisperWavHeader(wav(1, 16000, 16)), true);
+  assert.equal(core.isWhisperWavHeader(wav(1, 16000, 16, 26)), true);
+  assert.equal(core.isWhisperWavHeader(wav(2, 16000, 16)), false);
+  assert.equal(core.isWhisperWavHeader(wav(1, 44100, 16)), false);
+  assert.equal(core.isWhisperWavHeader(Buffer.from("ID3 not a wav")), false);
+});
+
+test("lists whisper.cpp languages and formats file sizes", () => {
+  assert.equal(core.whisperLanguages.length, 100);
+  assert.equal(core.whisperLanguageName("sr"), "Serbian");
+  assert.equal(core.whisperLanguageName("auto"), "Detect Automatically");
+  assert.equal(core.formatSize(512), "512 bytes");
+  assert.equal(core.formatSize(12_345_678), "12 MB");
+  assert.equal(core.formatSize(1_624_555_275), "1.6 GB");
+});
+
 test("media lookup refuses local file URLs before invoking yt-dlp", async () => {
   await assert.rejects(
     core.inspectMedia("file:///etc/passwd", {}),
