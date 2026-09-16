@@ -1,7 +1,7 @@
 {
   "name": "youtube-caption-workbench",
   "title": "YouTube Captions",
-  "description": "Save YouTube captions as RAW TXT, clean TXT, SRT or VTT, or transcribe with whisper.cpp",
+  "description": "Download YouTube subtitles as RAW TXT, clean TXT, SRT or VTT, save audio or video, or transcribe with whisper.cpp",
   "icon": "icon.png",
   "author": "davidrosic",
   "license": "MIT",
@@ -14,17 +14,10 @@
   ],
   "commands": [
     {
-      "name": "download-subtitles",
-      "title": "Download YouTube Subtitles",
-      "subtitle": "Captions & transcripts",
-      "description": "Choose a language and export RAW TXT, clean TXT, SRT or VTT captions",
-      "mode": "view"
-    },
-    {
-      "name": "download-media",
-      "title": "Download Video or Audio",
-      "subtitle": "MP3, M4A & MP4",
-      "description": "Download video or audio from sites supported by yt-dlp",
+      "name": "youtube-download",
+      "title": "YouTube Download",
+      "subtitle": "Subtitles, audio & video",
+      "description": "Download subtitles in any language and format, or the video's audio and video, from a YouTube link",
       "mode": "view"
     }
   ],
@@ -32,7 +25,7 @@
     {
       "name": "downloadDirectory",
       "title": "Download Folder",
-      "description": "Where subtitle files are saved",
+      "description": "Where subtitles, audio and video are saved",
       "type": "directory",
       "required": false
     },

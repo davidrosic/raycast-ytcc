@@ -377,11 +377,13 @@ export async function run(
   });
 }
 
-async function inspectUrl(
-  url: string,
+/** Reads video details with yt-dlp; YouTube links are normalized to a single watch URL. */
+export async function inspectMedia(
+  urlInput: string,
   settings: Settings,
   signal?: AbortSignal,
 ): Promise<Video> {
+  const url = mediaUrl(urlInput);
   const bin = await executable(settings.ytDlpPath, "yt-dlp");
   const output = await run(
     bin,
@@ -396,22 +398,6 @@ async function inspectUrl(
     signal,
   );
   return parseVideo(JSON.parse(output), url);
-}
-
-export async function inspect(
-  urlInput: string,
-  settings: Settings,
-  signal?: AbortSignal,
-): Promise<Video> {
-  return await inspectUrl(youtubeUrl(urlInput), settings, signal);
-}
-
-export async function inspectMedia(
-  urlInput: string,
-  settings: Settings,
-  signal?: AbortSignal,
-): Promise<Video> {
-  return await inspectUrl(mediaUrl(urlInput), settings, signal);
 }
 
 function cueTexts(input: string): string[] {

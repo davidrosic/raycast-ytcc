@@ -22,10 +22,10 @@ import {
   downloadMedia,
   favoriteLanguageTerms,
   favoriteScore,
-  inspect,
+  inspectMedia,
   languageLabel,
+  mediaUrl,
   transcribe,
-  youtubeUrl,
 } from "./core";
 import {
   errorMessage,
@@ -65,11 +65,11 @@ export default function Command() {
   function find(input: string) {
     let url: string;
     try {
-      url = youtubeUrl(input);
+      url = mediaUrl(input);
     } catch (error) {
       showToast({
         style: Toast.Style.Failure,
-        title: "Invalid YouTube link",
+        title: "Invalid video link",
         message: errorMessage(error),
       });
       return;
@@ -123,7 +123,7 @@ export default function Command() {
 }
 
 function CaptionList({ url, settings }: { url: string; settings: Settings }) {
-  const state = useVideo(url, settings, inspect);
+  const state = useVideo(url, settings, inspectMedia);
   const { video, preview, error } = state;
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState("");

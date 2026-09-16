@@ -8,7 +8,7 @@
 /* eslint-disable @typescript-eslint/ban-types */
 
 type ExtensionPreferences = {
-  /** Download Folder - Where subtitle files are saved */
+  /** Download Folder - Where subtitles, audio and video are saved */
   "downloadDirectory"?: string,
   /** yt-dlp Executable - Optional; otherwise found in PATH or common Homebrew locations */
   "ytDlpPath"?: string,
@@ -28,16 +28,12 @@ type ExtensionPreferences = {
 declare type Preferences = ExtensionPreferences
 
 declare namespace Preferences {
-  /** Preferences accessible in the `download-subtitles` command */
-  export type DownloadSubtitles = ExtensionPreferences & {}
-  /** Preferences accessible in the `download-media` command */
-  export type DownloadMedia = ExtensionPreferences & {}
+  /** Preferences accessible in the `youtube-download` command */
+  export type YoutubeDownload = ExtensionPreferences & {}
 }
 
 declare namespace Arguments {
-  /** Arguments passed to the `download-subtitles` command */
-  export type DownloadSubtitles = {}
-  /** Arguments passed to the `download-media` command */
-  export type DownloadMedia = {}
+  /** Arguments passed to the `youtube-download` command */
+  export type YoutubeDownload = {}
 }
 
