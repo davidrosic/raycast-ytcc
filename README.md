@@ -7,7 +7,7 @@ Save YouTube subtitles in any available language as RAW text, clean text, SRT or
 - **Every subtitle track.** Creator subtitles, YouTube's automatic captions, and auto-translations are all listed.
 - **Your languages first.** Favorite languages are listed at the top, and `serbian`, `Serbian` and `serbian (orig)` all match the same language.
 - **Audio and video.** Save MP3, M4A or MP4 in the best available quality.
-- **Transcribe your own files.** Paste the path of a recording, pick the spoken language and output format, and press ⌘↵.
+- **Transcribe your own files.** Select recordings in Finder, or paste a path, pick the spoken language and output format, and press ⌘↵.
 - **Local transcription.** Audio is never uploaded to a transcription service.
 
 ## Requirements
@@ -80,16 +80,28 @@ Files are named `Video Title [videoId].mp3`, `.m4a` or `.mp4`. Progress is shown
 
 ## Transcribe audio and video files
 
+### From Finder
+
+1. Select one or more audio or video files in Finder.
+2. Open **Transcribe Selected Files**. The selected files are already filled in.
+3. Check the **Spoken Language** and **Output**, then press ⌘↵.
+
+Folders in the selection are skipped. If nothing is selected, or Finder wasn't the frontmost app when you opened Raycast, choose the files in the form instead. Several files are transcribed one after another with the same settings; if one fails, the rest still run.
+
+Assign the command a hotkey or alias in Raycast settings to transcribe the selection with a single shortcut.
+
+### From YouTube Download
+
 Paste the full path of an audio or video file into the search bar, for example `/Users/you/Recordings/interview.m4a`. To copy a path in Finder, select the file and press ⌥⌘C. Paths starting with `~/`, paths in quotes, and paths with backslash-escaped spaces copied from Terminal also work.
 
-A form opens with two dropdowns:
+A form opens with the file and two dropdowns:
 
 - **Spoken Language**: your favorite languages come first, with the best match selected. All languages supported by whisper.cpp are listed below them, along with **Detect Automatically**. Type to search the list.
 - **Output**: **RAW · TXT (all cues)**, **Clean TXT**, **SRT** or **VTT**. RAW is selected by default.
 
-Press ⌘↵ to start. The extension converts the audio with ffmpeg to the 16 kHz mono WAV whisper.cpp needs, then transcribes it with `ggml-large-v3-turbo.bin`. Conversion reads only the first audio track and takes a few seconds even for long recordings. WAV files that are already 16 kHz mono 16-bit are not converted at all. Progress is shown on the row and in a toast.
+Press ⌘↵ to start. The extension converts the audio with ffmpeg to the 16 kHz mono WAV whisper.cpp needs, then transcribes it with `ggml-large-v3-turbo.bin`. Conversion reads only the first audio track and takes a few seconds even for long recordings. WAV files that are already 16 kHz mono 16-bit are not converted at all. Progress is shown in a toast, and on the row in **YouTube Download**.
 
-The result is saved next to the original file as `interview - whisper-Serbian.srt`, or `interview - whisper-Serbian - RAW.txt` for RAW. If that folder is not writable, it goes to the download folder instead.
+Each result is saved next to its original file as `interview - whisper-Serbian.srt`, or `interview - whisper-Serbian - RAW.txt` for RAW. If that folder is not writable, it goes to the download folder instead.
 
 If you type a path instead of pasting it, the file appears as a row. Press ↵ to open the form, or ⌘↵ to transcribe right away with the language and output shown in the side panel.
 
@@ -147,6 +159,8 @@ Set **Transcription Language** to the language spoken in the video, for example 
 **"HTTP Error 429" on automatic captions.** YouTube is rate limiting requests, which happens most with auto-translated languages. The extension retries once after 60 seconds. If it still fails, wait a few minutes, or use a creator track or the original-language track.
 
 **Transcribe with Whisper is not shown.** It only appears for videos with no subtitles of any kind. For videos that have captions, download a caption track instead.
+
+**Transcribe Selected Files doesn't show my selection.** Raycast can only read the selection when Finder is the frontmost app. Click the Finder window, then open the command.
 
 **"ggml-large-v3-turbo.bin was not found".** Set **Large V3 Turbo Model** to the model file, and make sure the file name is exactly `ggml-large-v3-turbo.bin`.
 
