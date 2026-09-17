@@ -633,6 +633,19 @@ export async function executable(
   );
 }
 
+export function canceledError(): Error {
+  return Object.assign(new Error("Canceled"), { name: "AbortError" });
+}
+
+export function isCanceled(error: unknown): boolean {
+  return error instanceof Error && error.name === "AbortError";
+}
+
+/**
+ * Runs a program and returns its output. `onProgress` receives every line it
+ * prints, from both stdout and stderr. Aborting `signal` stops the program and
+ * rejects with an AbortError.
+ */
 export async function run(
   bin: string,
   args: string[],
@@ -643,26 +656,40 @@ export async function run(
     const child = spawn(bin, args, { shell: false, windowsHide: true, signal });
     let stdout = "";
     let stderr = "";
+    const lines = (onLine: (line: string) => void) => {
+      let partial = "";
+      return (chunk: string) => {
+        const parts = (partial + chunk).split(/[\r\n]+/);
+        partial = parts.pop() ?? "";
+        parts.filter(Boolean).forEach(onLine);
+      };
+    };
+    const progressOut = onProgress && lines(onProgress);
+    const progressErr = onProgress && lines(onProgress);
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
     child.stdout.on("data", (chunk: string) => {
       stdout += chunk;
       if (stdout.length > 20_000_000) child.kill();
+      progressOut?.(chunk);
     });
     child.stderr.on("data", (chunk: string) => {
       stderr = (stderr + chunk).slice(-12_000);
-      const lines = chunk.split(/[\r\n]+/).filter(Boolean);
-      for (const line of lines) onProgress?.(line);
+      progressErr?.(chunk);
     });
-    child.on("error", fail);
+    child.on("error", (error) =>
+      fail(signal?.aborted ? canceledError() : error),
+    );
     child.on("close", (code) =>
-      code === 0
-        ? done(stdout)
-        : fail(
-            new Error(
-              `${basename(bin)} failed${code === null ? "" : ` (${code})`}: ${stderr.trim() || "No details available"}`,
+      signal?.aborted
+        ? fail(canceledError())
+        : code === 0
+          ? done(stdout)
+          : fail(
+              new Error(
+                `${basename(bin)} failed${code === null ? "" : ` (${code})`}: ${stderr.trim() || "No details available"}`,
+              ),
             ),
-          ),
     );
   });
 }
@@ -878,6 +905,7 @@ export async function downloadCaption(
   format: ExportFormat,
   settings: Settings,
   onProgress?: (message: string) => void,
+  signal?: AbortSignal,
 ): Promise<string> {
   const bin = await executable(settings.ytDlpPath, "yt-dlp");
   const destination = await outputDirectory(settings);
@@ -918,7 +946,7 @@ export async function downloadCaption(
       args.push("--convert-subs", "vtt");
     args.push(video.url);
     try {
-      await run(bin, args);
+      await run(bin, args, undefined, signal);
     } catch (error) {
       if (
         caption.kind !== "automatic" ||
@@ -929,12 +957,12 @@ export async function downloadCaption(
       onProgress?.(
         "YouTube rate limited this caption. Retrying after 60 seconds…",
       );
-      await run(bin, [
-        ...args.slice(0, -1),
-        "--sleep-subtitles",
-        "60",
-        video.url,
-      ]);
+      await run(
+        bin,
+        [...args.slice(0, -1), "--sleep-subtitles", "60", video.url],
+        undefined,
+        signal,
+      );
     }
     const files = (await readdir(temporary)).filter(
       (file) => !file.endsWith(".part"),
@@ -981,11 +1009,26 @@ export async function downloadCaption(
   }
 }
 
+/** A short status for a line yt-dlp prints while downloading media. */
+export function mediaProgress(
+  line: string,
+  format: MediaFormat,
+): string | undefined {
+  const name = format.toUpperCase();
+  const percent = /^\[download\]\s+([\d.]+)%/.exec(line);
+  if (percent) return `Downloading ${name}… ${Math.floor(Number(percent[1]))}%`;
+  if (/^\[Merger\]/.test(line)) return "Merging audio and video…";
+  if (/^\[(ExtractAudio|VideoConvertor)\]/.test(line))
+    return `Converting to ${name}…`;
+  return undefined;
+}
+
 export async function downloadMedia(
   video: Video,
   format: MediaFormat,
   settings: Settings,
   onProgress?: (message: string) => void,
+  signal?: AbortSignal,
 ): Promise<string> {
   const ytDlp = await executable(settings.ytDlpPath, "yt-dlp");
   const ffmpeg = await executable(settings.ffmpegPath, "ffmpeg");
@@ -996,6 +1039,7 @@ export async function downloadMedia(
     const args = [
       "--no-playlist",
       "--no-warnings",
+      "--newline",
       "--ffmpeg-location",
       ffmpeg,
       "-o",
@@ -1022,7 +1066,15 @@ export async function downloadMedia(
     }
     args.push(video.url);
     onProgress?.(`Downloading ${format.toUpperCase()}…`);
-    await run(ytDlp, args, onProgress);
+    await run(
+      ytDlp,
+      args,
+      (line) => {
+        const message = mediaProgress(line, format);
+        if (message) onProgress?.(message);
+      },
+      signal,
+    );
     const file = (await readdir(temporary)).find((name) =>
       name.endsWith(`.${format}`),
     );

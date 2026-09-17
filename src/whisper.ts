@@ -496,6 +496,7 @@ export async function transcribeVideo(
         [
           ...(await ytDlpOptions(settings)),
           "--no-playlist",
+          "--newline",
           "-f",
           "bestaudio/best",
           "-o",

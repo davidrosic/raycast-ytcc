@@ -305,3 +305,22 @@ test("finds audio and video files in chosen folders", () => {
     ],
   );
 });
+
+test("summarizes yt-dlp media progress", () => {
+  assert.equal(
+    core.mediaProgress("[download]  45.7% of   12.34MiB at  2.00MiB/s", "mp4"),
+    "Downloading MP4… 45%",
+  );
+  assert.equal(
+    core.mediaProgress('[Merger] Merging formats into "x.mp4"', "mp4"),
+    "Merging audio and video…",
+  );
+  assert.equal(
+    core.mediaProgress("[ExtractAudio] Destination: x.mp3", "mp3"),
+    "Converting to MP3…",
+  );
+  assert.equal(
+    core.mediaProgress("[youtube] jNQXAC9IVRw: Downloading", "mp3"),
+    undefined,
+  );
+});

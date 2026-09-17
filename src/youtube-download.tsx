@@ -11,7 +11,7 @@ import {
   useNavigation,
 } from "@raycast/api";
 import { basename, dirname } from "node:path";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { preferences } from "./preferences";
 import {
   Caption,
@@ -26,6 +26,7 @@ import {
   isYoutubeUrl,
   languageLabel,
   localFileInfo,
+  isCanceled,
   localPath,
   mediaUrl,
   rankFavorites,
@@ -95,69 +96,81 @@ export default function Command() {
     jobToast(job, showQueue);
   });
   const [selectedFormat, setSelectedFormat] = useState<ExportFormat>("raw");
+  const download = useRef<AbortController | undefined>(undefined);
 
-  async function save(caption: Caption, format: ExportFormat) {
-    if (!video) return;
+  /** Runs one download at a time with a toast that can cancel it. */
+  async function withDownload(
+    title: string,
+    work: (
+      signal: AbortSignal,
+      onProgress: (message: string) => void,
+    ) => Promise<string>,
+    saved: string,
+  ) {
+    download.current?.abort();
+    const controller = new AbortController();
+    download.current = controller;
     setBusy(true);
     const toast = await showToast({
       style: Toast.Style.Animated,
-      title: `Downloading ${caption.language} ${formatTitle(format)}…`,
+      title,
+      primaryAction: {
+        title: "Cancel Download",
+        onAction: () => controller.abort(),
+      },
     });
     try {
-      const path = await downloadCaption(
-        video,
-        caption,
-        format,
-        settings,
-        (message) => {
-          toast.title = message;
-        },
-      );
+      const path = await work(controller.signal, (message) => {
+        toast.title = message;
+        setProgress(message);
+      });
       setLastFile(path);
       toast.style = Toast.Style.Success;
-      toast.title = "Subtitle saved";
+      toast.title = saved;
       toast.message = path;
       toast.primaryAction = {
         title: "Show in Finder",
         onAction: () => showInFinder(path),
       };
     } catch (error) {
-      toast.style = Toast.Style.Failure;
-      toast.title = "Download failed";
-      toast.message = errorMessage(error);
+      toast.primaryAction = undefined;
+      if (isCanceled(error)) {
+        toast.style = Toast.Style.Success;
+        toast.title = "Download canceled";
+      } else {
+        toast.style = Toast.Style.Failure;
+        toast.title = "Download failed";
+        toast.message = errorMessage(error);
+      }
     } finally {
-      setBusy(false);
+      if (download.current === controller) {
+        download.current = undefined;
+        setBusy(false);
+        setActiveMedia(undefined);
+        setProgress("");
+      }
     }
   }
 
-  async function media(format: MediaFormat) {
+  function save(caption: Caption, format: ExportFormat) {
     if (!video) return;
-    setBusy(true);
+    withDownload(
+      `Downloading ${caption.language} ${formatTitle(format)}…`,
+      (signal, onProgress) =>
+        downloadCaption(video, caption, format, settings, onProgress, signal),
+      "Subtitle saved",
+    );
+  }
+
+  function media(format: MediaFormat) {
+    if (!video) return;
     setActiveMedia(format);
-    setProgress(`Downloading ${format.toUpperCase()}…`);
-    const toast = await showToast({
-      style: Toast.Style.Animated,
-      title: `Downloading ${format.toUpperCase()}…`,
-    });
-    try {
-      const path = await downloadMedia(video, format, settings, setProgress);
-      setLastFile(path);
-      toast.style = Toast.Style.Success;
-      toast.title = `${format.toUpperCase()} saved`;
-      toast.message = path;
-      toast.primaryAction = {
-        title: "Show in Finder",
-        onAction: () => showInFinder(path),
-      };
-    } catch (error) {
-      toast.style = Toast.Style.Failure;
-      toast.title = "Download failed";
-      toast.message = errorMessage(error);
-    } finally {
-      setBusy(false);
-      setActiveMedia(undefined);
-      setProgress("");
-    }
+    withDownload(
+      `Downloading ${format.toUpperCase()}…`,
+      (signal, onProgress) =>
+        downloadMedia(video, format, settings, onProgress, signal),
+      `${format.toUpperCase()} saved`,
+    );
   }
 
   function queueFiles(paths: string[], options: TranscriptionOptions) {
@@ -277,6 +290,14 @@ export default function Command() {
 
   const moreActions = (
     <ActionPanel.Section>
+      {busy && (
+        <Action
+          title="Cancel Download"
+          icon={Icon.XMarkCircle}
+          style={Action.Style.Destructive}
+          onAction={() => download.current?.abort()}
+        />
+      )}
       {lastFile && (
         <Action
           title="Show Last File in Finder"
