@@ -1,28 +1,40 @@
-# YouTube Download
+# YouTube Subtitles & Transcription
 
-Save YouTube subtitles in any available language as RAW text, clean text, SRT or VTT. Download the video's audio or video too. Transcribe videos without subtitles, or any audio or video file on your Mac, with [whisper.cpp](https://github.com/ggml-org/whisper.cpp) and the `large-v3-turbo` model.
+Save YouTube subtitles in any available language as RAW text, clean text, SRT or VTT, for one video or a whole playlist or channel. Download a video's audio or video too. Transcribe or translate videos without subtitles, or any audio or video file on your Mac, with [whisper.cpp](https://github.com/ggml-org/whisper.cpp).
 
 - **Copy a link, open the command.** A YouTube link in your clipboard loads right away, with no extra steps.
 - **See what you're downloading.** The video's thumbnail and title appear as soon as the link is recognized.
-- **Every subtitle track.** Creator subtitles, YouTube's automatic captions, and auto-translations are all listed.
+- **Every subtitle track.** Creator subtitles and YouTube's automatic captions are all listed.
+- **Whole playlists and channels.** One subtitle file per video, with videos already downloaded skipped.
 - **Your languages first.** Favorite languages are listed at the top, and `serbian`, `Serbian` and `serbian (orig)` all match the same language.
 - **Audio and video.** Save MP3, M4A or MP4 in the best available quality.
-- **Transcribe your own files.** Select recordings in Finder, or paste a path, pick the spoken language and output format, and press ⌘↵.
+- **Transcribe your own files.** Select recordings or folders in Finder, pick the language, output and model, and press ⌘↵.
+- **Keeps running when Raycast closes.** Transcriptions and playlist downloads run in a background queue, with progress in the menu bar and a Cancel action.
+- **No invented text in silence.** Silero voice activity detection skips silence and music, which stops whisper from repeating made-up lines.
 - **Local transcription.** Audio is never uploaded to a transcription service.
 
 ## Requirements
 
-| Tool                                                           | Needed for                       | Install                                       |
-| -------------------------------------------------------------- | -------------------------------- | --------------------------------------------- |
-| [yt-dlp](https://github.com/yt-dlp/yt-dlp)                     | Everything                       | `brew install yt-dlp`                         |
-| [ffmpeg](https://ffmpeg.org)                                   | MP3, M4A, MP4, and transcription | `brew install ffmpeg`                         |
-| [whisper.cpp](https://github.com/ggml-org/whisper.cpp) + model | Transcription only               | [Set up transcription](#set-up-transcription) |
+| Tool                                                           | Needed for                                        | Install                                       |
+| -------------------------------------------------------------- | ------------------------------------------------- | --------------------------------------------- |
+| [yt-dlp](https://github.com/yt-dlp/yt-dlp)                     | Everything on YouTube                             | `brew install yt-dlp`                         |
+| [ffmpeg](https://ffmpeg.org)                                   | MP3, M4A, MP4, subtitle conversion, transcription | `brew install ffmpeg`                         |
+| [whisper.cpp](https://github.com/ggml-org/whisper.cpp) + model | Transcription only                                | [Set up transcription](#set-up-transcription) |
 
 ```sh
 brew install yt-dlp ffmpeg
 ```
 
 The extension finds these tools in your `PATH`, `/opt/homebrew/bin`, or `/usr/local/bin`. If yours are elsewhere, set their paths in the extension preferences.
+
+## Commands
+
+| Command                       | What it does                                                                                              |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------- |
+| **YouTube Download**          | Subtitles, audio and video for a YouTube link, subtitles for a playlist or channel, or a pasted file path |
+| **Transcribe Selected Files** | Transcribes the files or folders selected in Finder                                                       |
+| **Queue**                     | Running, queued and finished transcriptions and playlist downloads, with Cancel and results               |
+| **Queue in Menu Bar**         | Shows progress in the menu bar while the queue is running                                                 |
 
 ## How to use it
 
@@ -36,18 +48,20 @@ Files are saved to `~/Downloads` unless you choose another folder in the prefere
 
 Already opened the command? Paste a link with ⌘V and it loads immediately, replacing the current video.
 
-| Key  | Action                                                                                                   |
-| ---- | -------------------------------------------------------------------------------------------------------- |
-| ↵    | Download the selected language in the chosen format, or the selected audio/video format                  |
-| ⌘P   | Choose the subtitle format                                                                               |
-| ⌘K   | More actions: other subtitle formats, Show Last File in Finder, Edit Favorite Languages, and preferences |
-| Type | Filter the list, for example `english` or `mp3`                                                          |
-| ⌘V   | Paste a YouTube link and load it, or paste a file path to transcribe it                                  |
-| Esc  | Clear the search bar; press again to close                                                               |
+| Key  | Action                                                                                                      |
+| ---- | ----------------------------------------------------------------------------------------------------------- |
+| ↵    | Download the selected language in the chosen format, or the selected audio/video format                     |
+| ⌘P   | Choose the subtitle format                                                                                  |
+| ⌘K   | More actions: other subtitle formats, Cancel Download, Show Queue, Edit Favorite Languages, and preferences |
+| Type | Filter the list, for example `english` or `mp3`                                                             |
+| ⌘V   | Paste a YouTube link and load it, or paste a file or folder path to transcribe it                           |
+| Esc  | Clear the search bar; press again to close                                                                  |
 
 ### Supported links
 
-YouTube `watch`, `youtu.be`, Shorts, Live and embed links, including `m.youtube.com` and `music.youtube.com`, with or without `https://`. Playlist and timestamp parameters are ignored; each search loads one video.
+- **Videos:** YouTube `watch`, `youtu.be`, Shorts, Live and embed links, including `m.youtube.com` and `music.youtube.com`, with or without `https://`.
+- **Playlists:** `youtube.com/playlist?list=…`. A video link that includes `&list=…` loads the video and also offers the whole playlist.
+- **Channels:** `youtube.com/@name`, `/channel/…`, `/c/…` and `/user/…`, optionally with `/videos`, `/shorts` or `/streams`.
 
 Links typed by hand, or from other sites [supported by yt-dlp](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md), show **Search This Link**. Press ↵ to load them.
 
@@ -60,13 +74,27 @@ Links typed by hand, or from other sites [supported by yt-dlp](https://github.co
 | **SRT**                  | `.srt`      | Timed subtitles for video players and editors. Empty cues are removed and the rest renumbered.                                              |
 | **VTT**                  | `.vtt`      | Timed WebVTT subtitles as YouTube provides them.                                                                                            |
 
-Rows marked **Creator** are subtitles uploaded by the channel. Rows marked **Automatic** are YouTube's speech recognition and machine translations. **(Original)** marks automatic captions in the video's spoken language.
+Rows marked **Creator** are subtitles uploaded by the channel. Rows marked **Automatic** are YouTube's speech recognition. **(Original)** marks automatic captions in the video's spoken language.
 
 Files are named `Video Title [videoId] - language.srt`, with `- auto` for automatic captions and `- RAW` for RAW exports. If a file with the same name exists, a number is added.
 
+Press ⌘K and choose **Cancel Download** to stop a download. The progress toast has a Cancel button too.
+
 ### Favorite languages
 
-Press ⌘K, choose **Edit Favorite Languages**, and enter names or codes separated by commas, for example `Serbian, English, de`. Matching ignores capitalization and `(orig)`, so `serbian`, `Serbian` and `serbian (orig)` all find Serbian. Matches appear in **Favorite Languages** at the top. If nothing matches exactly, the closest languages appear in **Suggested Languages**.
+Press ⌘K, choose **Edit Favorite Languages**, and enter names or codes separated by commas, for example `Serbian, English, de`. Matching ignores capitalization and `(orig)`, so `serbian`, `Serbian` and `serbian (orig)` all find Serbian. Matches appear in **Favorite Languages** at the top, in the order you wrote them. If nothing matches exactly, the closest languages appear in **Suggested Languages**.
+
+### Playlists and channels
+
+Paste a playlist or channel link into **YouTube Download**. The list shows **Download Subtitles for N Videos** and every video in it; press ↵ on a video to open it on its own.
+
+Press ↵ on **Download Subtitles for N Videos** and choose:
+
+- **Language:** your favorite languages come first.
+- **Subtitles:** **Creator subtitles, or automatic captions** (the default) uses the creator's subtitles and falls back to YouTube's automatic captions in the spoken language. **Creator subtitles only** skips videos without them. **Also YouTube's automatic translations** adds machine-translated captions, which download more slowly because YouTube limits how many you can get at once.
+- **Format:** RAW, Clean TXT, SRT or VTT.
+
+Press ⌘↵ to add the download to the queue. Each video's subtitles are saved in a folder named after the playlist or channel, inside your download folder. Videos without subtitles in that language are skipped and listed in the queue. Videos that already have a file in that folder are not downloaded again, so you can run the same download later to pick up new videos, or continue one you canceled.
 
 ## Audio and video
 
@@ -76,42 +104,60 @@ Press ⌘K, choose **Edit Favorite Languages**, and enter names or codes separat
 | **M4A** | Best available audio, saved as M4A                         |
 | **MP4** | Best available video with audio, saved as MP4              |
 
-Files are named `Video Title [videoId].mp3`, `.m4a` or `.mp4`. Progress is shown on the row while it downloads.
+Files are named `Video Title [videoId].mp3`, `.m4a` or `.mp4`. Progress is shown on the row and in a toast while it downloads, and several downloads can run at once.
 
 ## Transcribe audio and video files
 
 ### From Finder
 
-1. Select one or more audio or video files in Finder.
-2. Open **Transcribe Selected Files**. The selected files are already filled in.
-3. Check the **Spoken Language** and **Output**, then press ⌘↵.
+1. Select audio or video files, or folders, in Finder.
+2. Open **Transcribe Selected Files**. The selection is already filled in.
+3. Check the **Spoken Language**, **Output** and **Model**, then press ⌘↵.
 
-Folders in the selection are skipped. If nothing is selected, or Finder wasn't the frontmost app when you opened Raycast, choose the files in the form instead. Several files are transcribed one after another with the same settings; if one fails, the rest still run.
+Folders are searched, including subfolders, for audio and video files. If nothing is selected, or Finder wasn't the frontmost app when you opened Raycast, choose files or folders in the form instead.
 
 Assign the command a hotkey or alias in Raycast settings to transcribe the selection with a single shortcut.
 
 ### From YouTube Download
 
-Paste the full path of an audio or video file into the search bar, for example `/Users/you/Recordings/interview.m4a`. To copy a path in Finder, select the file and press ⌥⌘C. Paths starting with `~/`, paths in quotes, and paths with backslash-escaped spaces copied from Terminal also work.
+Paste the full path of an audio or video file or a folder into the search bar, for example `/Users/you/Recordings/interview.m4a`. To copy a path in Finder, select the file and press ⌥⌘C. Paths starting with `~/`, paths in quotes, and paths with backslash-escaped spaces copied from Terminal also work. The same form opens.
 
-A form opens with the file and two dropdowns:
+If you type a path instead of pasting it, the file appears as a row. Press ↵ to open the form, or ⌘↵ to transcribe right away with the language and model shown in the side panel.
 
-- **Spoken Language**: your favorite languages come first, with the best match selected. All languages supported by whisper.cpp are listed below them, along with **Detect Automatically**. Type to search the list.
-- **Output**: **RAW · TXT (all cues)**, **Clean TXT**, **SRT** or **VTT**. RAW is selected by default.
+### The form
 
-Press ⌘↵ to start. The extension converts the audio with ffmpeg to the 16 kHz mono WAV whisper.cpp needs, then transcribes it with `ggml-large-v3-turbo.bin`. Conversion reads only the first audio track and takes a few seconds even for long recordings. WAV files that are already 16 kHz mono 16-bit are not converted at all. Progress is shown in a toast, and on the row in **YouTube Download**.
+- **Spoken Language:** your favorite languages come first, with the best match selected. All languages supported by whisper.cpp are listed below them, along with **Detect Automatically**. Type to search the list.
+- **Output:** **RAW · TXT (all cues)**, **Clean TXT**, **SRT** or **VTT**. RAW is selected by default.
+- **Model:** the whisper models found next to your default model. `large-v3-turbo` is fast and accurate; `large-v3` is the most accurate and slowest; quantized models such as `large-v3-turbo-q5_0` are smaller and faster, and slightly less accurate. See [More models](#more-models).
+- **Translate to English:** whisper writes an English translation instead of the spoken language. Turbo models were not trained to translate and answer in the spoken language, so choose `large-v3` or `medium` for translation.
 
-Each result is saved next to its original file as `interview - whisper-Serbian.srt`, or `interview - whisper-Serbian - RAW.txt` for RAW. If that folder is not writable, it goes to the download folder instead.
+Press ⌘↵ to add the files to the queue. The extension converts the audio with ffmpeg to the 16 kHz mono WAV whisper.cpp needs, reading only the first audio track, and transcribes it. WAV files that are already 16 kHz mono 16-bit are not converted at all.
 
-If you type a path instead of pasting it, the file appears as a row. Press ↵ to open the form, or ⌘↵ to transcribe right away with the language and output shown in the side panel.
+Each result is saved next to its original file as `interview - whisper-Serbian.srt`, `interview - whisper-Serbian - RAW.txt` for RAW, or `interview - whisper-Serbian to English.srt` for a translation. If that folder is not writable, it goes to the download folder instead.
+
+## The queue
+
+Transcriptions and playlist subtitle downloads run in a background process, so they keep going when you close Raycast. Transcriptions run one at a time; a playlist download can run beside them.
+
+- **Queue** lists running, queued and finished jobs. Cancel a running or queued job with ⌃X. For finished jobs you can open the result, show it in Finder, copy a transcript, try again, or clear the list.
+- **Queue in Menu Bar** shows the progress of the running job, for example `42% +2`, and hides itself when the queue is empty. Click a finished job to open it, or hold ⌥ to cancel a running one.
+- When the queue finishes, a macOS notification sums up what was saved. Turn this off with **Notifications** in the preferences.
+
+A transcription that was running when your Mac shut down shows **Stopped before finishing**; choose **Try Again**.
 
 ## Transcribe videos without subtitles
 
-If a video has no creator subtitles and no automatic captions, the list shows **Transcribe with Whisper**. The extension downloads the audio to a temporary folder, converts it to 16 kHz mono WAV, and runs whisper.cpp with the `ggml-large-v3-turbo.bin` model. It saves three files: `Video Title [videoId] - whisper-Serbian.srt`, `.vtt` and `.txt`. Temporary audio is deleted afterwards.
+If a video has no creator subtitles and no automatic captions, the list shows **Transcribe with Whisper**. Press ↵ to choose the language, output and model, or ⌘↵ to transcribe right away in the language shown and the format selected with ⌘P. The audio is downloaded to a temporary folder and transcribed in the queue, and the result is saved to the download folder as `Video Title [videoId] - whisper-Serbian.srt`.
 
-### Set up transcription
+## Voice activity detection
 
-The model is about 1.6 GB and is not included with the extension. Its file must be named `ggml-large-v3-turbo.bin`.
+Whisper tends to invent text when it hears silence or music. A common result is the same line repeated for the whole recording, such as "Hvala što pratite kanal." With **Voice Activity Detection** on (the default), [Silero VAD](https://github.com/snakers4/silero-vad) finds the parts with speech first, and whisper transcribes only those. It is also faster: a 10-minute recording with long pauses takes about 15 seconds with `large-v3-turbo` on an M3.
+
+The first transcription downloads `ggml-silero-v6.2.0.bin` (885 KB) from the [whisper.cpp VAD models](https://huggingface.co/ggml-org/whisper-vad) and checks its checksum. To use your own copy, put it next to your whisper model or select it under **Silero VAD Model**. VAD needs a recent whisper.cpp.
+
+## Set up transcription
+
+The `large-v3-turbo` model is about 1.6 GB and is not included with the extension.
 
 **Option 1: Homebrew**
 
@@ -122,7 +168,7 @@ curl -L -o ~/whisper-models/ggml-large-v3-turbo.bin \
   https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin
 ```
 
-In the extension preferences, set **Large V3 Turbo Model** by selecting `ggml-large-v3-turbo.bin` in your `whisper-models` folder. `whisper-cli` is found automatically.
+In the extension preferences, set **Default Whisper Model** to `ggml-large-v3-turbo.bin` in your `whisper-models` folder. `whisper-cli` is found automatically.
 
 **Option 2: build from source**
 
@@ -134,39 +180,78 @@ cmake --build build --config Release
 sh ./models/download-ggml-model.sh large-v3-turbo
 ```
 
-A checkout at `~/GitHub/whisper.cpp` is found automatically. For a checkout elsewhere, set **whisper.cpp CLI** to its `build/bin/whisper-cli`; the model in its `models` folder is then found automatically.
+A checkout at `~/GitHub/whisper.cpp` and its `models/ggml-large-v3-turbo.bin` are found automatically. For a checkout elsewhere, set **whisper.cpp CLI** to its `build/bin/whisper-cli`.
 
-Set **Transcription Language** to the language spoken in the video, for example `Serbian`, `English` or `auto`. The default is `Serbian`.
+### More models
+
+Every `ggml-*.bin` model in the same folder as your default model appears in the **Model** dropdown. To add one:
+
+```sh
+# in a whisper.cpp checkout
+sh ./models/download-ggml-model.sh large-v3
+sh ./models/download-ggml-model.sh large-v3-turbo-q5_0
+
+# or with curl, into your models folder
+curl -L -O https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3.bin
+```
+
+If you built whisper.cpp with Core ML (`-DWHISPER_COREML=1`), each model also needs its Core ML encoder, such as `ggml-large-v3-encoder.mlmodelc`, next to it. Models without one are marked **needs Core ML encoder**. Create it with `./models/generate-coreml-model.sh large-v3`, or use a build without Core ML. Quantized models use the encoder of their base model.
 
 ## Preferences
 
-| Preference                     | Default             | Description                                                                                                       |
-| ------------------------------ | ------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| **Download Folder**            | `~/Downloads`       | Where YouTube downloads and transcriptions are saved. File transcriptions are saved next to the file.             |
-| **yt-dlp Executable**          | Found automatically | Path to `yt-dlp`                                                                                                  |
-| **ffmpeg Executable**          | Found automatically | Path to `ffmpeg`                                                                                                  |
-| **whisper.cpp CLI**            | Found automatically | Path to `whisper-cli`                                                                                             |
-| **Large V3 Turbo Model**       | Next to whisper.cpp | Path to `ggml-large-v3-turbo.bin`                                                                                 |
-| **Transcription Language**     | `Serbian`           | Spoken language for YouTube videos without subtitles, and the default for files when no favorite language matches |
-| **Favorite Caption Languages** | `Serbian`           | Starting value for favorite languages, until you edit them with ⌘K                                                |
+| Preference                     | Default             | Description                                                                                                         |
+| ------------------------------ | ------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| **Download Folder**            | `~/Downloads`       | Where subtitles, audio, video and YouTube transcriptions are saved. File transcriptions are saved next to the file. |
+| **yt-dlp Executable**          | Found automatically | Path to `yt-dlp`                                                                                                    |
+| **ffmpeg Executable**          | Found automatically | Path to `ffmpeg`                                                                                                    |
+| **Browser Sign-In**            | Off                 | The browser whose YouTube sign-in yt-dlp uses, for age-restricted, private and members-only videos                  |
+| **whisper.cpp CLI**            | Found automatically | Path to `whisper-cli`                                                                                               |
+| **Default Whisper Model**      | Next to whisper.cpp | The model selected in the form. Other models in its folder can be chosen when transcribing.                         |
+| **Voice Activity Detection**   | On                  | Transcribe only the parts with speech, using Silero VAD                                                             |
+| **Silero VAD Model**           | Downloaded          | Path to a Silero VAD model for whisper.cpp                                                                          |
+| **Notifications**              | On                  | Show a notification when everything in the queue is done                                                            |
+| **Transcription Language**     | `Serbian`           | Spoken language to select when no favorite language matches                                                         |
+| **Favorite Caption Languages** | `Serbian`           | Starting value for favorite languages, until you edit them with ⌘K                                                  |
+
+### Browser sign-in
+
+Some videos only play when you're signed in: age-restricted, private, members-only, and sometimes videos YouTube wants to confirm you're not a bot for. Choose the browser you use YouTube in under **Browser Sign-In**, and yt-dlp reads that browser's YouTube cookies on your Mac.
+
+- **Safari:** macOS protects Safari's cookies. Give Raycast Full Disk Access in System Settings → Privacy & Security → Full Disk Access.
+- **Chrome, Brave, Edge and other Chromium browsers:** macOS asks to allow access to the browser's “Safe Storage” key the first time. Choose Always Allow.
+- **Firefox:** works without extra permissions.
 
 ## Troubleshooting
 
 **"yt-dlp was not found" or "ffmpeg was not found".** Install them with `brew install yt-dlp ffmpeg`, or set their paths in the preferences.
 
-**A video won't load or download.** YouTube changes often, so update yt-dlp first with `brew upgrade yt-dlp`. Private, members-only and some age-restricted videos may not work, because the extension doesn't use your browser's sign-in.
+**A video won't load or download.** YouTube changes often, and old yt-dlp versions stop working. When a newer yt-dlp is available, **YouTube Download** says so and offers **Update yt-dlp**. It runs `brew upgrade yt-dlp`, `pipx upgrade yt-dlp`, `pip install --upgrade yt-dlp` or `yt-dlp -U`, depending on how yt-dlp was installed. The newest version is checked on GitHub at most twice a day.
 
-**"HTTP Error 429" on automatic captions.** YouTube is rate limiting requests, which happens most with auto-translated languages. The extension retries once after 60 seconds. If it still fails, wait a few minutes, or use a creator track or the original-language track.
+**"This video is age-restricted" or "only for channel members".** Turn on [Browser Sign-In](#browser-sign-in).
 
-**Transcribe with Whisper is not shown.** It only appears for videos with no subtitles of any kind. For videos that have captions, download a caption track instead.
+**"HTTP Error 429" on automatic captions.** YouTube is rate limiting requests, which happens most with automatic translations. The extension retries once after 60 seconds. If it still fails, wait a few minutes, or use a creator track or the original-language track.
+
+**The transcript repeats one line, or has text where nobody speaks.** Make sure **Voice Activity Detection** is on.
+
+**"needs Core ML encoder" or "failed to load Core ML model".** See [More models](#more-models).
+
+**"large-v3-turbo can't translate".** Choose `large-v3`, `medium` or another model without "turbo" in its name.
 
 **Transcribe Selected Files doesn't show my selection.** Raycast can only read the selection when Finder is the frontmost app. Click the Finder window, then open the command.
 
-**"ggml-large-v3-turbo.bin was not found".** Set **Large V3 Turbo Model** to the model file, and make sure the file name is exactly `ggml-large-v3-turbo.bin`.
+**No notification when the queue finishes.** Notifications come from Script Editor. Allow them in System Settings → Notifications → Script Editor.
+
+**A job says "Stopped before finishing".** The background process was stopped, for example by a restart. Choose **Try Again** in **Queue**.
 
 ## Privacy
 
-Everything runs on your Mac. The extension talks only to YouTube, or the site you search, to read video details, thumbnails and subtitles. Audio, video and transcripts never leave your computer.
+Everything runs on your Mac. The extension talks only to:
+
+- YouTube, or the site you search, for video details, thumbnails, subtitles, audio and video.
+- GitHub, to check the newest yt-dlp version at most twice a day.
+- Hugging Face, once, to download the Silero VAD model.
+
+Audio, video and transcripts never leave your computer. With Browser Sign-In on, yt-dlp reads your browser's cookies locally to talk to YouTube; they are not sent anywhere else.
 
 ## Development
 
