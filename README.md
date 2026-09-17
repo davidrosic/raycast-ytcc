@@ -9,7 +9,7 @@ Save YouTube subtitles in any available language as RAW text, clean text, SRT or
 - **Your languages first.** Favorite languages are listed at the top, and `serbian`, `Serbian` and `serbian (orig)` all match the same language.
 - **Audio and video from most sites.** Save MP3, M4A or MP4 in the best available quality, including every video in an X post or Instagram carousel.
 - **Transcribe your own files.** Select recordings or folders in Finder, pick the language, output and model, and press ⌘↵.
-- **Keeps running when Raycast closes.** Transcriptions and playlist downloads run in a background queue, with progress in the menu bar and a Cancel action.
+- **Keeps running when Raycast closes.** Audio and video downloads, playlist downloads and transcriptions run in a background queue, with progress in the menu bar and a Cancel action.
 - **No invented text in silence.** Silero voice activity detection skips silence and music, which stops whisper from repeating made-up lines.
 - **Local transcription.** Audio is never uploaded to a transcription service.
 
@@ -33,7 +33,7 @@ The extension finds these tools in your `PATH`, `/opt/homebrew/bin`, or `/usr/lo
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Download Video**            | Subtitles, audio and video for a YouTube link, subtitles for a playlist or channel, audio and video from other sites, or a pasted file path |
 | **Transcribe Selected Files** | Transcribes the files or folders selected in Finder                                                                                         |
-| **Queue**                     | Running, queued and finished transcriptions and playlist downloads, with Cancel and results                                                 |
+| **Queue**                     | Running, queued and finished downloads and transcriptions, with Cancel and results                                                          |
 | **Queue in Menu Bar**         | Shows progress in the menu bar while the queue is running                                                                                   |
 
 ## How to use it
@@ -105,7 +105,9 @@ Press ⌘↵ to add the download to the queue. Each video's subtitles are saved 
 | **M4A** | Best available audio, saved as M4A                         |
 | **MP4** | Best available video with audio, saved as MP4              |
 
-Files are named `Video Title [videoId].mp3`, `.m4a` or `.mp4`. Progress is shown on the row and in a toast while it downloads, and several downloads can run at once.
+Press ↵ to add the download to the [queue](#the-queue), so it keeps going when you close Raycast. Progress is shown on the row and in the menu bar, and up to three downloads run at once. Press ↵ on a row that is downloading to cancel it.
+
+Files are named `Video Title [videoId].mp3`, `.m4a` or `.mp4`.
 
 ### Instagram, X and other sites
 
@@ -150,7 +152,7 @@ Each result is saved next to its original file as `interview - whisper-Serbian.s
 
 ## The queue
 
-Transcriptions and playlist subtitle downloads run in a background process, so they keep going when you close Raycast. Transcriptions run one at a time; a playlist download can run beside them.
+Audio and video downloads, playlist downloads and transcriptions run in a background process, so they keep going when you close Raycast. Transcriptions run one at a time, and so do playlist downloads. Up to three audio and video downloads run beside them.
 
 - **Queue** lists running, queued and finished jobs. Cancel a running or queued job with ⌃X. For finished jobs you can open the result, show it in Finder, copy a transcript, try again, or clear the list.
 - **Queue in Menu Bar** shows the progress of the running job, for example `42% +2`, and hides itself when the queue is empty. Click a finished job to open it, or hold ⌥ to cancel a running one.

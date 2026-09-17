@@ -575,6 +575,16 @@ test("summarizes a finished queue", () => {
     ]),
     "Talks: subtitles for 2 of 3 videos saved",
   );
+  const media = (status) => ({
+    title: "Clip",
+    status,
+    error: "No audio",
+    spec: { kind: "media", format: "mp3" },
+  });
+  assert.equal(
+    core.queueSummary([media("done"), media("failed"), file("done")]),
+    "1 transcription saved\n1 of 2 downloads saved, 1 failed",
+  );
 });
 
 test("recognizes links from other video sites", () => {

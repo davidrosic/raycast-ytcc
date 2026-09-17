@@ -13,7 +13,7 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
-import { Settings } from "./core";
+import { MediaFormat, Settings, VideoRef, downloadMedia } from "./core";
 import { PlaylistDownload, downloadPlaylistSubtitles } from "./playlists";
 import {
   TranscriptionOptions,
@@ -28,7 +28,8 @@ export type JobSpec =
       video: { id: string; title: string; url: string };
       options: TranscriptionOptions;
     }
-  | ({ kind: "playlist" } & PlaylistDownload);
+  | ({ kind: "playlist" } & PlaylistDownload)
+  | { kind: "media"; video: VideoRef; format: MediaFormat };
 
 export type JobStatus = "queued" | "running" | "done" | "failed" | "canceled";
 
@@ -287,11 +288,76 @@ function releaseLock(folder: string) {
   }
 }
 
-/** Transcriptions share the GPU and run one at a time; downloads run beside them. */
-function lane(job: Job): "whisper" | "download" {
-  return job.spec.kind === "file" || job.spec.kind === "video"
-    ? "whisper"
-    : "download";
+/**
+ * How many jobs of a kind run at once. Transcriptions share the GPU and run
+ * one at a time, playlists one at a time so sites don't limit them, and a few
+ * single downloads run beside them.
+ */
+const laneLimits = { whisper: 1, playlist: 1, download: 3 };
+
+function lane(job: Job): keyof typeof laneLimits {
+  switch (job.spec.kind) {
+    case "file":
+    case "video":
+      return "whisper";
+    case "playlist":
+      return "playlist";
+    default:
+      return "download";
+  }
+}
+
+type JobResult = Pick<Job, "outputs" | "skipped" | "folder">;
+
+async function perform(
+  spec: JobSpec,
+  settings: Settings,
+  onProgress: (message: string, percent?: number) => void,
+  signal: AbortSignal,
+): Promise<JobResult> {
+  switch (spec.kind) {
+    case "file":
+      return {
+        outputs: [
+          await transcribeFile(
+            spec.path,
+            spec.options,
+            settings,
+            onProgress,
+            signal,
+          ),
+        ],
+      };
+    case "video":
+      return {
+        outputs: [
+          await transcribeVideo(
+            spec.video,
+            spec.options,
+            settings,
+            onProgress,
+            signal,
+          ),
+        ],
+      };
+    case "playlist":
+      return await downloadPlaylistSubtitles(
+        spec,
+        settings,
+        onProgress,
+        signal,
+      );
+    case "media":
+      return {
+        outputs: await downloadMedia(
+          spec.video,
+          spec.format,
+          settings,
+          onProgress,
+          signal,
+        ),
+      };
+  }
 }
 
 const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
@@ -323,45 +389,22 @@ async function runJob(folder: string, queued: Job): Promise<Job> {
     }
   };
   try {
-    const { spec, settings } = job;
-    if (spec.kind === "playlist") {
-      const result = await downloadPlaylistSubtitles(
-        spec,
-        settings,
-        onProgress,
-        controller.signal,
-      );
-      job = {
-        ...job,
-        ...result,
-        status: result.outputs.length ? "done" : "failed",
-        error: result.outputs.length
-          ? undefined
-          : (result.skipped[0]?.reason ?? "No subtitles were saved"),
-      };
-    } else {
-      const outputs =
-        spec.kind === "file"
-          ? [
-              await transcribeFile(
-                spec.path,
-                spec.options,
-                settings,
-                onProgress,
-                controller.signal,
-              ),
-            ]
-          : [
-              await transcribeVideo(
-                spec.video,
-                spec.options,
-                settings,
-                onProgress,
-                controller.signal,
-              ),
-            ];
-      job = { ...job, status: "done", outputs };
-    }
+    const result = await perform(
+      job.spec,
+      job.settings,
+      onProgress,
+      controller.signal,
+    );
+    // Jobs that skip items, like playlists, fail when they saved nothing.
+    const failed = result.skipped !== undefined && !result.outputs?.length;
+    job = {
+      ...job,
+      ...result,
+      status: failed ? "failed" : "done",
+      error: failed
+        ? (result.skipped?.[0]?.reason ?? "Nothing was saved")
+        : undefined,
+    };
   } catch (error) {
     job = controller.signal.aborted
       ? {
@@ -410,19 +453,24 @@ function notify(title: string, message: string) {
 export function queueSummary(jobs: Job[]): string | undefined {
   const count = (value: number, noun: string) =>
     `${value} ${noun}${value === 1 ? "" : "s"}`;
+  if (jobs.length === 1 && jobs[0].status === "failed")
+    return `${jobs[0].title}: ${jobs[0].error}`;
   const parts: string[] = [];
-  const transcriptions = jobs.filter((job) => job.spec.kind !== "playlist");
-  const done = transcriptions.filter((job) => job.status === "done").length;
-  const failed = transcriptions.filter((job) => job.status === "failed");
-  if (failed.length === 1 && !done && jobs.length === 1)
-    return `${failed[0].title}: ${failed[0].error}`;
-  if (done && failed.length)
-    parts.push(
-      `${done} of ${done + failed.length} transcriptions saved, ${failed.length} failed`,
-    );
-  else if (done) parts.push(`${count(done, "transcription")} saved`);
-  else if (failed.length)
-    parts.push(`${count(failed.length, "transcription")} failed`);
+  const groups: [JobSpec["kind"][], string][] = [
+    [["file", "video"], "transcription"],
+    [["media"], "download"],
+  ];
+  for (const [kinds, noun] of groups) {
+    const group = jobs.filter((job) => kinds.includes(job.spec.kind));
+    const done = group.filter((job) => job.status === "done").length;
+    const failed = group.filter((job) => job.status === "failed").length;
+    if (done && failed)
+      parts.push(
+        `${done} of ${done + failed} ${noun}s saved, ${failed} failed`,
+      );
+    else if (done) parts.push(`${count(done, noun)} saved`);
+    else if (failed) parts.push(`${count(failed, noun)} failed`);
+  }
   for (const job of jobs) {
     if (job.spec.kind !== "playlist" || job.status === "canceled") continue;
     const saved = job.outputs?.length ?? 0;
@@ -442,20 +490,30 @@ export function queueSummary(jobs: Job[]): string | undefined {
 export async function runQueueWorker(folder: string) {
   const finished: Job[] = [];
   while (acquireLock(folder)) {
-    const running = new Map<string, Promise<void>>();
+    const running = new Map<
+      string,
+      { lane: keyof typeof laneLimits; done: Promise<void> }
+    >();
     try {
       for (;;) {
         for (const job of readJobs(folder)) {
-          if (job.status !== "queued" || running.has(lane(job))) continue;
-          running.set(
-            lane(job),
-            runJob(folder, job)
+          const jobLane = lane(job);
+          if (
+            job.status !== "queued" ||
+            running.has(job.id) ||
+            [...running.values()].filter((other) => other.lane === jobLane)
+              .length >= laneLimits[jobLane]
+          )
+            continue;
+          running.set(job.id, {
+            lane: jobLane,
+            done: runJob(folder, job)
               .then(
                 (result) => void finished.push(result),
                 (error) => console.error(error),
               )
-              .finally(() => running.delete(lane(job))),
-          );
+              .finally(() => running.delete(job.id)),
+          });
         }
         for (const job of readJobs(folder))
           if (
@@ -464,7 +522,10 @@ export async function runQueueWorker(folder: string) {
           )
             finishWithoutWorker(folder, job.id);
         if (!running.size) break;
-        await Promise.race([sleep(1000), ...running.values()]);
+        await Promise.race([
+          sleep(1000),
+          ...[...running.values()].map((other) => other.done),
+        ]);
       }
     } finally {
       releaseLock(folder);

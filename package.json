@@ -30,15 +30,15 @@
     {
       "name": "transcription-queue",
       "title": "Queue",
-      "subtitle": "Transcriptions & playlist downloads",
-      "description": "See running, queued and finished transcriptions and playlist subtitle downloads, cancel them, and open the results. The queue keeps running when you close Raycast.",
+      "subtitle": "Downloads & transcriptions",
+      "description": "See running, queued and finished downloads and transcriptions, cancel them, and open the results. The queue keeps running when you close Raycast.",
       "mode": "view"
     },
     {
       "name": "queue-menu-bar",
       "title": "Queue in Menu Bar",
       "subtitle": "Progress while jobs run",
-      "description": "Shows transcription and playlist download progress in the menu bar while the queue is running",
+      "description": "Shows download and transcription progress in the menu bar while the queue is running",
       "mode": "menu-bar",
       "interval": "10s"
     }

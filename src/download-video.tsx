@@ -20,7 +20,6 @@ import {
   MediaFormat,
   defaultWhisperLanguage,
   downloadCaption,
-  downloadMedia,
   favoriteScore,
   formatSize,
   inspectMedia,
@@ -101,8 +100,6 @@ export default function Command() {
   const { video, preview, error } = state;
   const [downloadCount, setDownloadCount] = useState(0);
   const busy = downloadCount > 0;
-  const [progress, setProgress] = useState("");
-  const [activeMedia, setActiveMedia] = useState<MediaFormat>();
   const [lastFile, setLastFile] = useState<string>();
   const showQueue = () => push(<QueueList settings={settings} />);
   const queue = useQueue(settings, (job) => {
@@ -137,7 +134,6 @@ export default function Command() {
       const paths = [
         await work(controller.signal, (message) => {
           toast.title = message;
-          setProgress(message);
         }),
       ].flat();
       const path = paths[0];
@@ -162,10 +158,6 @@ export default function Command() {
     } finally {
       downloads.current.delete(controller);
       setDownloadCount(downloads.current.size);
-      if (!downloads.current.size) {
-        setActiveMedia(undefined);
-        setProgress("");
-      }
     }
   }
 
@@ -181,15 +173,20 @@ export default function Command() {
 
   function media(format: MediaFormat) {
     if (!video) return;
-    setActiveMedia(format);
-    withDownload(
-      `Downloading ${format.toUpperCase()}…`,
-      (signal, onProgress) =>
-        downloadMedia(video, format, settings, onProgress, signal),
-      (count) =>
-        count > 1
-          ? `${count} ${format.toUpperCase()} files saved`
-          : `${format.toUpperCase()} saved`,
+    const { id, title, url, items, isLive } = video;
+    addToQueue(
+      settings,
+      [
+        {
+          title,
+          spec: {
+            kind: "media",
+            video: { id, title, url, items, isLive },
+            format,
+          },
+        },
+      ],
+      showQueue,
     );
   }
 
@@ -265,9 +262,19 @@ export default function Command() {
       job.spec.kind === "video" &&
       job.spec.video.id === video?.id,
   );
+  const mediaJob = (format: MediaFormat) =>
+    queue.jobs.find(
+      (job) =>
+        isActive(job) &&
+        job.spec.kind === "media" &&
+        job.spec.video.id === video?.id &&
+        job.spec.format === format,
+    );
   const cancelAction = (job: (typeof queue.jobs)[number]) => (
     <Action
-      title="Cancel Transcription"
+      title={
+        job.spec.kind === "media" ? "Cancel Download" : "Cancel Transcription"
+      }
       icon={Icon.XMarkCircle}
       style={Action.Style.Destructive}
       onAction={() => {
@@ -867,43 +874,47 @@ export default function Command() {
       )}
       {video && !filePath && mediaItems.length > 0 && (
         <List.Section title="Audio & Video">
-          {mediaItems.map(({ value, subtitle }) => (
-            <List.Item
-              key={value}
-              title={`Download ${value.toUpperCase()}`}
-              subtitle={
-                (activeMedia === value && progress) ||
-                (video.isLive
-                  ? "Live stream, available after it ends"
-                  : video.items
-                    ? `${subtitle} · ${video.items} videos`
-                    : subtitle)
-              }
-              icon={value === "mp4" ? Icon.Video : Icon.Music}
-              detail={videoDetail(state, [
-                { title: "Format", text: value.toUpperCase() },
-                { title: "Quality", text: subtitle },
-                ...(video.items
-                  ? [
-                      {
-                        title: "Videos",
-                        text: `${video.items}, each saved as its own file`,
-                      },
-                    ]
-                  : []),
-              ])}
-              actions={
-                <ActionPanel>
-                  <Action
-                    title={`Download ${value.toUpperCase()}`}
-                    icon={Icon.Download}
-                    onAction={() => media(value)}
-                  />
-                  {moreActions}
-                </ActionPanel>
-              }
-            />
-          ))}
+          {mediaItems.map(({ value, subtitle }) => {
+            const job = mediaJob(value);
+            return (
+              <List.Item
+                key={value}
+                title={`Download ${value.toUpperCase()}`}
+                subtitle={
+                  (job && jobSubtitle(job)) ||
+                  (video.isLive
+                    ? "Live stream, available after it ends"
+                    : video.items
+                      ? `${subtitle} · ${video.items} videos`
+                      : subtitle)
+                }
+                icon={value === "mp4" ? Icon.Video : Icon.Music}
+                detail={videoDetail(state, [
+                  { title: "Format", text: value.toUpperCase() },
+                  { title: "Quality", text: subtitle },
+                  ...(video.items
+                    ? [
+                        {
+                          title: "Videos",
+                          text: `${video.items}, each saved as its own file`,
+                        },
+                      ]
+                    : []),
+                ])}
+                actions={
+                  <ActionPanel>
+                    {job && cancelAction(job)}
+                    <Action
+                      title={`Download ${value.toUpperCase()}`}
+                      icon={Icon.Download}
+                      onAction={() => media(value)}
+                    />
+                    {moreActions}
+                  </ActionPanel>
+                }
+              />
+            );
+          })}
         </List.Section>
       )}
       {manual.length > 0 && (

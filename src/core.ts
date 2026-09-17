@@ -35,6 +35,8 @@ export type Video = {
   items?: number;
   isLive?: boolean;
 };
+/** What a queued job needs to know about a video. */
+export type VideoRef = Pick<Video, "id" | "title" | "url" | "items" | "isLive">;
 export type VideoPreview = {
   title?: string;
   channel?: string;
@@ -1292,14 +1294,15 @@ export function mediaProgress(
 /**
  * Downloads a video's audio or video and returns the saved files: one file,
  * or one per video for posts with several, such as X posts and Instagram
- * carousels.
+ * carousels. Files are saved in the download folder unless `directory` is set.
  */
 export async function downloadMedia(
-  video: Video,
+  video: VideoRef,
   format: MediaFormat,
   settings: Settings,
   onProgress?: (message: string) => void,
   signal?: AbortSignal,
+  directory?: string,
 ): Promise<string[]> {
   if (video.isLive)
     throw new Error(
@@ -1307,7 +1310,7 @@ export async function downloadMedia(
     );
   // MP3, M4A and MP4 all need ffmpeg; fail early with a clear message.
   await executable(settings.ffmpegPath, "ffmpeg");
-  const destination = await outputDirectory(settings);
+  const destination = directory ?? (await outputDirectory(settings));
   const temporary = await mkdtemp(join(tmpdir(), "raycast-media-"));
   try {
     const output = join(temporary, "%(playlist_index|0)s-%(id)s.%(ext)s");

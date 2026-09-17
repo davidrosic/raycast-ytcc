@@ -11,6 +11,7 @@ import {
   Toast,
   launchCommand,
   open,
+  showInFinder,
   showToast,
 } from "@raycast/api";
 import { readFileSync } from "node:fs";
@@ -39,6 +40,23 @@ function refreshMenuBar() {
   );
 }
 
+/** What a job does, such as `transcription` or `MP4 download`. */
+export function jobNoun(spec: JobSpec): string {
+  switch (spec.kind) {
+    case "file":
+    case "video":
+      return "transcription";
+    case "playlist":
+      return "subtitle download";
+    case "media":
+      return `${spec.format.toUpperCase()} download`;
+  }
+}
+
+function capitalize(text: string): string {
+  return `${text[0].toUpperCase()}${text.slice(1)}`;
+}
+
 /** Adds jobs to the background queue and says so in a toast. */
 export async function addToQueue(
   settings: Settings,
@@ -47,14 +65,13 @@ export async function addToQueue(
 ): Promise<Job[]> {
   const added = enqueue(settings, jobs);
   refreshMenuBar();
-  const noun = jobs.every((job) => job.spec.kind === "playlist")
-    ? "subtitle download"
-    : "transcription";
+  const nouns = new Set(jobs.map((job) => jobNoun(job.spec)));
+  const noun = nouns.size === 1 ? [...nouns][0] : "job";
   await showToast({
     style: Toast.Style.Success,
     title:
       jobs.length === 1
-        ? `${noun[0].toUpperCase()}${noun.slice(1)} added to the queue`
+        ? `${capitalize(noun)} added to the queue`
         : `${jobs.length} ${noun}s added to the queue`,
     message: "The queue keeps running when you close Raycast.",
     primaryAction: showQueue
@@ -177,25 +194,43 @@ export function jobSubtitle(job: Job): string {
   }
 }
 
+function doneTitle(job: Job): string {
+  const count = job.outputs?.length ?? 0;
+  switch (job.spec.kind) {
+    case "playlist":
+      return `Subtitles saved for ${job.title}`;
+    case "media": {
+      const format = job.spec.format.toUpperCase();
+      return count > 1 ? `${count} ${format} files saved` : `${format} saved`;
+    }
+    default:
+      return count > 1
+        ? `${count} transcriptions saved`
+        : "Transcription saved";
+  }
+}
+
 export function jobToast(job: Job, showQueue?: () => void) {
   const output = job.folder ?? job.outputs?.[0];
   showToast(
     job.status === "done"
       ? {
           style: Toast.Style.Success,
-          title:
-            job.spec.kind === "playlist"
-              ? `Subtitles saved for ${job.title}`
-              : "Transcription saved",
+          title: doneTitle(job),
           message: job.spec.kind === "playlist" ? jobSubtitle(job) : output,
-          primaryAction: output
-            ? { title: "Open", onAction: () => open(output) }
-            : undefined,
+          primaryAction: !output
+            ? undefined
+            : job.spec.kind === "media"
+              ? {
+                  title: "Show in Finder",
+                  onAction: () => showInFinder(output),
+                }
+              : { title: "Open", onAction: () => open(output) },
         }
       : job.status === "failed"
         ? {
             style: Toast.Style.Failure,
-            title: `${job.spec.kind === "playlist" ? "Subtitle download" : "Transcription"} failed: ${job.title}`,
+            title: `${capitalize(jobNoun(job.spec))} failed: ${job.title}`,
             message: job.error,
             primaryAction: showQueue
               ? { title: "Show Queue", onAction: showQueue }
@@ -265,9 +300,9 @@ export function QueueList({ settings }: { settings: Settings }) {
                   title={
                     job.status === "queued"
                       ? "Remove from Queue"
-                      : job.spec.kind === "playlist"
-                        ? "Cancel Download"
-                        : "Cancel Transcription"
+                      : jobNoun(job.spec) === "transcription"
+                        ? "Cancel Transcription"
+                        : "Cancel Download"
                   }
                   icon={Icon.XMarkCircle}
                   style={Action.Style.Destructive}
@@ -281,7 +316,13 @@ export function QueueList({ settings }: { settings: Settings }) {
               </ActionPanel.Section>
             ) : (
               <ActionPanel.Section>
-                {output && (
+                {output && job.spec.kind === "media" && (
+                  <>
+                    <Action.Open title="Open File" target={output} />
+                    <Action.ShowInFinder path={output} />
+                  </>
+                )}
+                {output && job.spec.kind !== "media" && (
                   <>
                     <Action.Open title="Open Transcript" target={output} />
                     <Action.ShowInFinder path={output} />
@@ -363,7 +404,7 @@ export function QueueList({ settings }: { settings: Settings }) {
       <List.EmptyView
         icon={Icon.Waveform}
         title="Nothing in the queue"
-        description="Transcriptions and playlist subtitle downloads you start appear here. They keep running when you close Raycast."
+        description="Transcriptions and downloads you start appear here. They keep running when you close Raycast."
       />
       <List.Section title="Running">
         {jobs.filter((job) => job.status === "running").map(item)}
