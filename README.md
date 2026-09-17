@@ -1,13 +1,13 @@
 # YouTube Subtitles & Transcription
 
-Save YouTube subtitles in any available language as RAW text, clean text, SRT or VTT, for one video or a whole playlist or channel. Download a video's audio or video too. Transcribe or translate videos without subtitles, or any audio or video file on your Mac, with [whisper.cpp](https://github.com/ggml-org/whisper.cpp).
+Save YouTube subtitles in any available language as RAW text, clean text, SRT or VTT, for one video or a whole playlist or channel. Download audio or video from YouTube, Instagram, X, TikTok and [hundreds of other sites](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md). Transcribe or translate videos without subtitles, or any audio or video file on your Mac, with [whisper.cpp](https://github.com/ggml-org/whisper.cpp).
 
-- **Copy a link, open the command.** A YouTube link in your clipboard loads right away, with no extra steps.
+- **Copy a link, open the command.** A YouTube, Instagram or X link in your clipboard loads right away, with no extra steps.
 - **See what you're downloading.** The video's thumbnail and title appear as soon as the link is recognized.
 - **Every subtitle track.** Creator subtitles and YouTube's automatic captions are all listed.
 - **Whole playlists and channels.** One subtitle file per video, with videos already downloaded skipped.
 - **Your languages first.** Favorite languages are listed at the top, and `serbian`, `Serbian` and `serbian (orig)` all match the same language.
-- **Audio and video.** Save MP3, M4A or MP4 in the best available quality.
+- **Audio and video from most sites.** Save MP3, M4A or MP4 in the best available quality, including every video in an X post or Instagram carousel.
 - **Transcribe your own files.** Select recordings or folders in Finder, pick the language, output and model, and press ⌘↵.
 - **Keeps running when Raycast closes.** Transcriptions and playlist downloads run in a background queue, with progress in the menu bar and a Cancel action.
 - **No invented text in silence.** Silero voice activity detection skips silence and music, which stops whisper from repeating made-up lines.
@@ -17,7 +17,7 @@ Save YouTube subtitles in any available language as RAW text, clean text, SRT or
 
 | Tool                                                           | Needed for                                        | Install                                       |
 | -------------------------------------------------------------- | ------------------------------------------------- | --------------------------------------------- |
-| [yt-dlp](https://github.com/yt-dlp/yt-dlp)                     | Everything on YouTube                             | `brew install yt-dlp`                         |
+| [yt-dlp](https://github.com/yt-dlp/yt-dlp)                     | All downloads                                     | `brew install yt-dlp`                         |
 | [ffmpeg](https://ffmpeg.org)                                   | MP3, M4A, MP4, subtitle conversion, transcription | `brew install ffmpeg`                         |
 | [whisper.cpp](https://github.com/ggml-org/whisper.cpp) + model | Transcription only                                | [Set up transcription](#set-up-transcription) |
 
@@ -29,12 +29,12 @@ The extension finds these tools in your `PATH`, `/opt/homebrew/bin`, or `/usr/lo
 
 ## Commands
 
-| Command                       | What it does                                                                                              |
-| ----------------------------- | --------------------------------------------------------------------------------------------------------- |
-| **YouTube Download**          | Subtitles, audio and video for a YouTube link, subtitles for a playlist or channel, or a pasted file path |
-| **Transcribe Selected Files** | Transcribes the files or folders selected in Finder                                                       |
-| **Queue**                     | Running, queued and finished transcriptions and playlist downloads, with Cancel and results               |
-| **Queue in Menu Bar**         | Shows progress in the menu bar while the queue is running                                                 |
+| Command                       | What it does                                                                                                                                |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| **YouTube Download**          | Subtitles, audio and video for a YouTube link, subtitles for a playlist or channel, audio and video from other sites, or a pasted file path |
+| **Transcribe Selected Files** | Transcribes the files or folders selected in Finder                                                                                         |
+| **Queue**                     | Running, queued and finished transcriptions and playlist downloads, with Cancel and results                                                 |
+| **Queue in Menu Bar**         | Shows progress in the menu bar while the queue is running                                                                                   |
 
 ## How to use it
 
@@ -54,7 +54,7 @@ Already opened the command? Paste a link with ⌘V and it loads immediately, rep
 | ⌘P   | Choose the subtitle format                                                                                  |
 | ⌘K   | More actions: other subtitle formats, Cancel Download, Show Queue, Edit Favorite Languages, and preferences |
 | Type | Filter the list, for example `english` or `mp3`                                                             |
-| ⌘V   | Paste a YouTube link and load it, or paste a file or folder path to transcribe it                           |
+| ⌘V   | Paste a video link and load it, or paste a file or folder path to transcribe it                             |
 | Esc  | Clear the search bar; press again to close                                                                  |
 
 ### Supported links
@@ -62,8 +62,9 @@ Already opened the command? Paste a link with ⌘V and it loads immediately, rep
 - **Videos:** YouTube `watch`, `youtu.be`, Shorts, Live and embed links, including `m.youtube.com` and `music.youtube.com`, with or without `https://`.
 - **Playlists:** `youtube.com/playlist?list=…`. A video link that includes `&list=…` loads the video and also offers the whole playlist.
 - **Channels:** `youtube.com/@name`, `/channel/…`, `/c/…` and `/user/…`, optionally with `/videos`, `/shorts` or `/streams`.
+- **Other video sites:** posts, reels and videos from Instagram, X (Twitter), TikTok, Facebook, Threads, Bluesky, Reddit, Twitch, Kick, Bilibili, Vimeo, Dailymotion, SoundCloud, Bandcamp and other popular sites load as soon as you paste them, like YouTube links. Profile and home pages don't.
 
-Links typed by hand, or from other sites [supported by yt-dlp](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md), show **Search This Link**. Press ↵ to load them.
+Links typed by hand, and links to any other site [supported by yt-dlp](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md), show **Search This Link**. Press ↵ to load them.
 
 ## Subtitles
 
@@ -105,6 +106,18 @@ Press ⌘↵ to add the download to the queue. Each video's subtitles are saved 
 | **MP4** | Best available video with audio, saved as MP4              |
 
 Files are named `Video Title [videoId].mp3`, `.m4a` or `.mp4`. Progress is shown on the row and in a toast while it downloads, and several downloads can run at once.
+
+### Instagram, X and other sites
+
+Audio and video downloads work the same way on every site yt-dlp supports: paste the link, check the thumbnail and title, and press ↵ on MP3, M4A or MP4. On X the title is the post's text, and on Instagram it's "Video by" and the account name.
+
+- **Posts with several videos**, such as X posts and Instagram carousels, save every video as its own file: `Title [postId] 1.mp4`, `Title [postId] 2.mp4`. Photos in a carousel are skipped. The row shows how many videos the post has.
+- **Posts without video**, such as a text-only X post, say so instead of downloading.
+- **Videos without sound** download as MP4; MP3 and M4A say the video has no audio.
+- **Live streams** can be downloaded after they end.
+- **Sign-in:** Instagram shows many posts only to signed-in accounts, and X sometimes limits downloads without an account. Turn on [Browser Sign-In](#browser-sign-in) with the browser you use those sites in.
+
+Only YouTube has subtitle tracks. For other sites the list offers **Transcribe with Whisper** instead; for posts with several videos, it transcribes the first one.
 
 ## Transcribe audio and video files
 
@@ -204,7 +217,7 @@ If you built whisper.cpp with Core ML (`-DWHISPER_COREML=1`), each model also ne
 | **Download Folder**            | `~/Downloads`       | Where subtitles, audio, video and YouTube transcriptions are saved. File transcriptions are saved next to the file. |
 | **yt-dlp Executable**          | Found automatically | Path to `yt-dlp`                                                                                                    |
 | **ffmpeg Executable**          | Found automatically | Path to `ffmpeg`                                                                                                    |
-| **Browser Sign-In**            | Off                 | The browser whose YouTube sign-in yt-dlp uses, for age-restricted, private and members-only videos                  |
+| **Browser Sign-In**            | Off                 | The browser whose sign-in yt-dlp uses, for restricted YouTube videos and posts that need an account on other sites  |
 | **whisper.cpp CLI**            | Found automatically | Path to `whisper-cli`                                                                                               |
 | **Default Whisper Model**      | Next to whisper.cpp | The model selected in the form. Other models in its folder can be chosen when transcribing.                         |
 | **Voice Activity Detection**   | On                  | Transcribe only the parts with speech, using Silero VAD                                                             |
@@ -215,7 +228,7 @@ If you built whisper.cpp with Core ML (`-DWHISPER_COREML=1`), each model also ne
 
 ### Browser sign-in
 
-Some videos only play when you're signed in: age-restricted, private, members-only, and sometimes videos YouTube wants to confirm you're not a bot for. Choose the browser you use YouTube in under **Browser Sign-In**, and yt-dlp reads that browser's YouTube cookies on your Mac.
+Some videos only play when you're signed in: age-restricted, private and members-only YouTube videos, videos YouTube wants to confirm you're not a bot for, and many Instagram posts. X also limits downloads without an account at times. Choose the browser you're signed in to those sites with under **Browser Sign-In**, and yt-dlp reads that browser's cookies on your Mac.
 
 - **Safari:** macOS protects Safari's cookies. Give Raycast Full Disk Access in System Settings → Privacy & Security → Full Disk Access.
 - **Chrome, Brave, Edge and other Chromium browsers:** macOS asks to allow access to the browser's “Safe Storage” key the first time. Choose Always Allow.
@@ -227,7 +240,11 @@ Some videos only play when you're signed in: age-restricted, private, members-on
 
 **A video won't load or download.** YouTube changes often, and old yt-dlp versions stop working. When a newer yt-dlp is available, **YouTube Download** says so and offers **Update yt-dlp**. It runs `brew upgrade yt-dlp`, `pipx upgrade yt-dlp`, `pip install --upgrade yt-dlp` or `yt-dlp -U`, depending on how yt-dlp was installed. The newest version is checked on GitHub at most twice a day.
 
-**"This video is age-restricted" or "only for channel members".** Turn on [Browser Sign-In](#browser-sign-in).
+**"This video is age-restricted", "only for channel members", or "Instagram only shows this to signed-in accounts".** Turn on [Browser Sign-In](#browser-sign-in).
+
+**"X is limiting downloads without an account".** Try again in a moment, or turn on [Browser Sign-In](#browser-sign-in) with the browser you use X in.
+
+**"No speech was found".** The recording has only music, sound effects or silence, so there is nothing to transcribe.
 
 **"HTTP Error 429" on automatic captions.** YouTube is rate limiting requests, which happens most with automatic translations. The extension retries once after 60 seconds. If it still fails, wait a few minutes, or use a creator track or the original-language track.
 
@@ -247,7 +264,7 @@ Some videos only play when you're signed in: age-restricted, private, members-on
 
 Everything runs on your Mac. The extension talks only to:
 
-- YouTube, or the site you search, for video details, thumbnails, subtitles, audio and video.
+- YouTube, or the site a link is from, for video details, thumbnails, subtitles, audio and video.
 - GitHub, to check the newest yt-dlp version at most twice a day.
 - Hugging Face, once, to download the Silero VAD model.
 

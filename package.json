@@ -1,7 +1,7 @@
 {
   "name": "youtube-subtitles-transcription",
   "title": "YouTube Subtitles & Transcription",
-  "description": "Download YouTube subtitles, audio and video, including whole playlists and channels, and transcribe or translate any recording locally with whisper.cpp",
+  "description": "Download YouTube subtitles, audio and video from YouTube, Instagram, X and hundreds of other sites, and transcribe or translate any recording locally with whisper.cpp",
   "icon": "icon.png",
   "author": "davidrosic",
   "license": "MIT",
@@ -16,8 +16,8 @@
     {
       "name": "youtube-download",
       "title": "YouTube Download",
-      "subtitle": "Subtitles, audio, video & playlists",
-      "description": "Download subtitles in any language and format, audio or video from a YouTube link, or subtitles for a whole playlist or channel",
+      "subtitle": "Subtitles, audio & video",
+      "description": "Download subtitles in any language from a YouTube video, playlist or channel, or audio and video from YouTube, Instagram, X and other sites",
       "mode": "view"
     },
     {
@@ -68,7 +68,7 @@
     {
       "name": "browserCookies",
       "title": "Browser Sign-In",
-      "description": "Off by default. Choose the browser you're signed in to YouTube with to download age-restricted, private and members-only videos. yt-dlp reads that browser's cookies on your Mac; they are never sent anywhere else.",
+      "description": "Off by default. Choose the browser you're signed in with to download age-restricted, private and members-only YouTube videos, and posts on Instagram, X and other sites that need an account. yt-dlp reads that browser's cookies on your Mac; they are never sent anywhere else.",
       "type": "dropdown",
       "default": "none",
       "required": false,
