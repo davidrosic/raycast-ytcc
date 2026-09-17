@@ -96,6 +96,7 @@ export default function Command() {
       const path = localPath(text);
       if (path && localFileInfo(path)) push(transcribeForm(path));
     },
+    { browserTab: settings.browserTab !== false },
   );
   const collectionUrl = url ? youtubeCollectionUrl(url) : undefined;
   const state = useVideo(

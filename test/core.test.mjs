@@ -730,3 +730,19 @@ test("downloads playlists as audio or video and skips what is saved", () => {
     "Talks: 2 of 3 videos saved as MP3",
   );
 });
+
+test("reads the frontmost tab only from browsers", () => {
+  assert.equal(core.isBrowser("com.apple.Safari"), true);
+  assert.equal(core.isBrowser("org.mozilla.firefox"), true);
+  assert.equal(core.isBrowser("com.tinyspeck.slackmacgap"), false);
+  assert.equal(core.isBrowser(undefined), false);
+  assert.match(
+    core.browserTabScript("com.apple.Safari"),
+    /application id "com\.apple\.Safari".*URL of current tab of front window/,
+  );
+  assert.match(
+    core.browserTabScript("company.thebrowser.Browser"),
+    /URL of active tab of front window/,
+  );
+  assert.equal(core.browserTabScript("org.mozilla.firefox"), undefined);
+});

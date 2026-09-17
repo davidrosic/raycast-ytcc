@@ -2,7 +2,7 @@
 
 Save YouTube subtitles in any available language as RAW text, clean text, SRT or VTT, for one video or a whole playlist or channel. Download audio or video from YouTube, Instagram, X, TikTok and [hundreds of other sites](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md). Transcribe or translate videos without subtitles, or any audio or video file on your Mac, with [whisper.cpp](https://github.com/ggml-org/whisper.cpp).
 
-- **Copy a link, open the command.** A YouTube, Instagram or X link in your clipboard loads right away, with no extra steps.
+- **Copy a link, open the command.** A YouTube, Instagram or X link in your clipboard loads right away, with no extra steps. With no link in the clipboard, the video open in your browser loads instead.
 - **See what you're downloading.** The video's thumbnail and title appear as soon as the link is recognized.
 - **Every subtitle track.** Creator subtitles and YouTube's automatic captions are all listed.
 - **Whole playlists and channels.** Subtitles, MP3, M4A or MP4 for every video, with videos already downloaded skipped.
@@ -47,6 +47,12 @@ The extension finds these tools in your `PATH`, `/opt/homebrew/bin`, or `/usr/lo
 Files are saved to `~/Downloads` unless you choose another folder in the preferences.
 
 Already opened the command? Paste a link with ⌘V and it loads immediately, replacing the current video.
+
+### From your browser
+
+Watching a video in your browser? Open **Download Video** from the browser and the video in the current tab loads, with no need to copy its link. A video link in your clipboard always comes first; the browser tab is used only when the clipboard has none, and only when you open the command while a browser is the frontmost app.
+
+This works in Safari, Chrome, Arc, Brave, Edge, Vivaldi, Opera, Dia and other Chromium browsers. The first time, macOS asks to let Raycast control the browser; the extension only reads the address of the current tab. Firefox and Zen need the [Raycast browser extension](https://www.raycast.com/browser-extension). Turn this off with **Browser Tab** in the preferences.
 
 | Key  | Action                                                                                                      |
 | ---- | ----------------------------------------------------------------------------------------------------------- |
@@ -225,6 +231,7 @@ If you built whisper.cpp with Core ML (`-DWHISPER_COREML=1`), each model also ne
 | **Download Folder**            | `~/Downloads`       | Where subtitles, audio, video and YouTube transcriptions are saved. File transcriptions are saved next to the file. |
 | **yt-dlp Executable**          | Found automatically | Path to `yt-dlp`                                                                                                    |
 | **ffmpeg Executable**          | Found automatically | Path to `ffmpeg`                                                                                                    |
+| **Browser Tab**                | On                  | Load the video open in the frontmost browser tab when the clipboard has no video link                               |
 | **Browser Sign-In**            | Off                 | The browser whose sign-in yt-dlp uses, for restricted YouTube videos and posts that need an account on other sites  |
 | **whisper.cpp CLI**            | Found automatically | Path to `whisper-cli`                                                                                               |
 | **Default Whisper Model**      | Next to whisper.cpp | The model selected in the form. Other models in its folder can be chosen when transcribing.                         |
@@ -274,6 +281,9 @@ Everything runs on your Mac. The extension talks only to:
 
 - YouTube, or the site a link is from, for video details, thumbnails, subtitles, audio and video.
 - GitHub, to check the newest yt-dlp version at most twice a day.
+
+With **Browser Tab** on, the extension reads the address of your browser's current tab when you open **Download Video** from the browser. It isn't stored or sent anywhere.
+
 - Hugging Face, once, to download the Silero VAD model.
 
 Audio, video and transcripts never leave your computer. With Browser Sign-In on, yt-dlp reads your browser's cookies locally to talk to YouTube; they are not sent anywhere else.

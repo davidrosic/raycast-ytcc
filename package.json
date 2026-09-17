@@ -112,6 +112,15 @@
       ]
     },
     {
+      "name": "browserTab",
+      "title": "Browser Tab",
+      "label": "Load the video open in your browser",
+      "description": "When no video link is in your clipboard, Download Video opens the video in the browser tab you were watching. macOS asks once to let Raycast read the tab's address.",
+      "type": "checkbox",
+      "default": true,
+      "required": false
+    },
+    {
       "name": "whisperPath",
       "title": "whisper.cpp CLI",
       "description": "Path to whisper-cli; auto-detected in ~/GitHub/whisper.cpp when available",

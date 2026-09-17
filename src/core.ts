@@ -53,6 +53,8 @@ export type Settings = {
   notifyWhenDone?: boolean;
   /** A browser yt-dlp reads YouTube cookies from, or `none`. */
   browserCookies?: string;
+  /** Load the video in the frontmost browser tab when the clipboard has no link. */
+  browserTab?: boolean;
   whisperLanguage?: string;
   favoriteLanguages?: string;
   /** The extension's support folder, for files it downloads such as the VAD model. */
@@ -232,6 +234,55 @@ export function mediaUrl(input: string): string {
   if (!["https:", "http:"].includes(parsed.protocol))
     throw new Error("Enter an HTTP or HTTPS video URL.");
   return parsed.toString();
+}
+
+/** Browsers whose frontmost tab AppleScript can read, by bundle ID. */
+const scriptableBrowsers: Record<string, "safari" | "chromium"> = {
+  "com.apple.Safari": "safari",
+  "com.apple.SafariTechnologyPreview": "safari",
+  "com.kagi.kagimacOS": "safari",
+  "com.google.Chrome": "chromium",
+  "com.google.Chrome.beta": "chromium",
+  "com.google.Chrome.dev": "chromium",
+  "com.google.Chrome.canary": "chromium",
+  "org.chromium.Chromium": "chromium",
+  "com.brave.Browser": "chromium",
+  "com.brave.Browser.beta": "chromium",
+  "com.brave.Browser.nightly": "chromium",
+  "com.microsoft.edgemac": "chromium",
+  "com.microsoft.edgemac.Beta": "chromium",
+  "com.microsoft.edgemac.Dev": "chromium",
+  "com.microsoft.edgemac.Canary": "chromium",
+  "com.vivaldi.Vivaldi": "chromium",
+  "com.operasoftware.Opera": "chromium",
+  "com.operasoftware.OperaGX": "chromium",
+  "company.thebrowser.Browser": "chromium",
+  "company.thebrowser.dia": "chromium",
+  "ai.perplexity.comet": "chromium",
+};
+
+/** Browsers that only the Raycast browser extension can read. */
+const otherBrowsers = new Set([
+  "org.mozilla.firefox",
+  "org.mozilla.firefoxdeveloperedition",
+  "org.mozilla.nightly",
+  "app.zen-browser.zen",
+]);
+
+export function isBrowser(bundleId?: string): boolean {
+  return Boolean(
+    bundleId && (scriptableBrowsers[bundleId] || otherBrowsers.has(bundleId)),
+  );
+}
+
+/** AppleScript that returns the address of a browser's frontmost tab. */
+export function browserTabScript(bundleId: string): string | undefined {
+  const kind = scriptableBrowsers[bundleId];
+  if (!kind) return undefined;
+  const app = `application id "${bundleId}"`;
+  return kind === "safari"
+    ? `tell ${app} to if (count of windows) > 0 then get URL of current tab of front window`
+    : `tell ${app} to if (count of windows) > 0 then get URL of active tab of front window`;
 }
 
 /** The text that changed between two values of a text field. */

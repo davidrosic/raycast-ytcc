@@ -1,7 +1,10 @@
 import {
+  BrowserExtension,
   Clipboard,
   List,
   Toast,
+  environment,
+  getFrontmostApplication,
   openExtensionPreferences,
   showToast,
 } from "@raycast/api";
@@ -11,11 +14,14 @@ import {
   Settings,
   Video,
   VideoPreview,
+  browserTabScript,
   fetchPreview,
   formatDuration,
+  isBrowser,
   isMediaLink,
   pastedFilePath,
   pastedMediaLink,
+  run,
   youtubeThumbnail,
 } from "./core";
 
@@ -160,28 +166,72 @@ export function videoDetail(
 }
 
 /**
- * Search text that doubles as the link field: a YouTube link in the clipboard is
- * searched on launch, pasting a YouTube link searches it right away, and pasting
- * a file path calls onFile.
+ * The address of the tab open in the browser Raycast was opened from, or
+ * undefined when another app was in front. AppleScript reads the browser's own
+ * tab; the Raycast browser extension is used for browsers AppleScript can't
+ * read, such as Firefox.
+ */
+async function browserTabUrl(): Promise<string | undefined> {
+  let bundleId: string | undefined;
+  try {
+    bundleId = (await getFrontmostApplication()).bundleId;
+  } catch {
+    return undefined;
+  }
+  if (!bundleId || !isBrowser(bundleId)) return undefined;
+  const script = browserTabScript(bundleId);
+  if (script)
+    try {
+      const url = (
+        await run(
+          "/usr/bin/osascript",
+          ["-e", script],
+          undefined,
+          AbortSignal.timeout(3000),
+        )
+      ).trim();
+      if (url) return url;
+    } catch {
+      /* not allowed to control the browser, or no window */
+    }
+  if (!environment.canAccess(BrowserExtension)) return undefined;
+  try {
+    return (await BrowserExtension.getTabs()).find((tab) => tab.active)?.url;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Search text that doubles as the link field: a video link in the clipboard is
+ * searched on launch, or else the video open in the browser tab you came from,
+ * when `browserTab` is on. Pasting a video link searches it right away, and
+ * pasting a file path calls onFile.
  */
 export function useLinkSearch(
   onLink: (link: string) => void,
   onFile: (text: string) => void,
+  { browserTab = true }: { browserTab?: boolean } = {},
 ) {
   const [text, setText] = useState("");
   const previous = useRef("");
 
   useEffect(() => {
-    Clipboard.readText().then(
-      (clipboard) => {
-        const link = clipboard?.trim();
-        if (!link || previous.current || !isMediaLink(link)) return;
-        previous.current = link;
-        setText(link);
-        onLink(link);
-      },
-      () => undefined,
-    );
+    (async () => {
+      const clipboard = (
+        await Clipboard.readText().catch(() => undefined)
+      )?.trim();
+      const link =
+        clipboard && isMediaLink(clipboard)
+          ? clipboard
+          : browserTab
+            ? (await browserTabUrl())?.trim()
+            : undefined;
+      if (!link || previous.current || !isMediaLink(link)) return;
+      previous.current = link;
+      setText(link);
+      onLink(link);
+    })();
   }, []);
 
   return {
