@@ -38,7 +38,7 @@
       "name": "manage-tools-and-models",
       "title": "Manage Tools and Models",
       "subtitle": "yt-dlp, ffmpeg, whisper.cpp",
-      "description": "Install yt-dlp, ffmpeg and whisper.cpp with Homebrew, download whisper models, and choose the default model",
+      "description": "Install yt-dlp, ffmpeg and whisper.cpp with Homebrew, download whisper models and their Core ML encoders, and choose the default model",
       "mode": "view"
     },
     {

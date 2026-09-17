@@ -211,7 +211,7 @@ export function TranscribeForm({
               const model = models.models.find(
                 (item) => item.path === values.model,
               );
-              if (model?.missingEncoder) {
+              if (model?.missingEncoder && !model.encoderSize) {
                 setModelError(
                   `whisper.cpp uses Core ML and needs ${model.missingEncoder} for this model`,
                 );
@@ -327,7 +327,10 @@ function modelTitle(model: WhisperModel): string {
   return [
     modelName(model.path),
     formatSize(model.size),
-    model.missingEncoder && "needs Core ML encoder",
+    model.missingEncoder &&
+      (model.encoderSize
+        ? `downloads its ${formatSize(model.encoderSize)} Core ML encoder first`
+        : "needs Core ML encoder"),
   ]
     .filter(Boolean)
     .join(" · ");

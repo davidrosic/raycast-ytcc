@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { createReadStream, existsSync } from "node:fs";
 import { mkdir, open, rename, rm, stat, statfs } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import { formatSize } from "./core";
+import { formatSize, run } from "./core";
 
 /** A whisper.cpp model on Hugging Face, with its checksum. */
 export type CatalogModel = {
@@ -11,6 +11,8 @@ export type CatalogModel = {
   size: number;
   sha256: string;
   description: string;
+  /** The Core ML encoder, for models that have one; quantized models use their base model's. */
+  encoder?: { size: number; sha256: string };
 };
 
 const repository = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main";
@@ -22,6 +24,11 @@ export const modelCatalog: CatalogModel[] = [
     size: 1624555275,
     sha256: "1fc70f774d38eb169993ac391eea357ef47c88757ef72ee5943879b7e8e2bc69",
     description: "Recommended: fast and nearly as accurate as large-v3",
+    encoder: {
+      size: 1173393014,
+      sha256:
+        "84bedfe895bd7b5de6e8e89a0803dfc5addf8c0c5bc4c937451716bf7cf7988a",
+    },
   },
   {
     name: "large-v3-turbo-q8_0",
@@ -40,6 +47,11 @@ export const modelCatalog: CatalogModel[] = [
     size: 3095033483,
     sha256: "64d182b440b98d5203c4f9bd541544d84c605196c4f7b845dfa11fb23594d1e2",
     description: "Most accurate and slowest; can translate",
+    encoder: {
+      size: 1175711232,
+      sha256:
+        "47837be7594a29429ec08620043390c4d6d467f8bd362df09e9390ace76a55a4",
+    },
   },
   {
     name: "large-v3-q5_0",
@@ -52,6 +64,11 @@ export const modelCatalog: CatalogModel[] = [
     size: 1533763059,
     sha256: "6c14d5adee5f86394037b4e4e8b59f1673b6cee10e3cf0b11bbdbee79c156208",
     description: "Faster than large-v3, less accurate; can translate",
+    encoder: {
+      size: 567829413,
+      sha256:
+        "79b0b8d436d47d3f24dd3afc91f19447dd686a4f37521b2f6d9c30a642133fbd",
+    },
   },
   {
     name: "medium-q5_0",
@@ -64,14 +81,38 @@ export const modelCatalog: CatalogModel[] = [
     size: 487601967,
     sha256: "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b",
     description: "Fast, for clear speech in common languages",
+    encoder: {
+      size: 163083239,
+      sha256:
+        "de43fb9fed471e95c19e60ae67575c2bf09e8fb607016da171b06ddad313988b",
+    },
   },
   {
     name: "base",
     size: 147951465,
     sha256: "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe",
     description: "Very fast, least accurate",
+    encoder: {
+      size: 37922638,
+      sha256:
+        "7e6ab77041942572f239b5b602f8aaa1c3ed29d73e3d8f20abea03a773541089",
+    },
   },
 ];
+
+/** The model a quantized model is made from, such as `large-v3` for `large-v3-q5_0`. */
+export function baseModelName(name: string): string {
+  return name.replace(/-q\d_\d$/, "");
+}
+
+/** The Core ML encoder for a model name, when one can be downloaded. */
+export function catalogEncoder(
+  name: string,
+): { name: string; size: number; sha256: string } | undefined {
+  const base = baseModelName(name);
+  const encoder = modelCatalog.find((model) => model.name === base)?.encoder;
+  return encoder && { name: base, ...encoder };
+}
 
 /** The folder models are downloaded to. */
 export function modelsFolder(supportPath: string): string {
@@ -199,5 +240,43 @@ export async function downloadModel(
     progressMessage(name, onProgress),
     signal,
   );
+  return target;
+}
+
+/**
+ * Downloads the Core ML encoder for a model into the model's folder, where
+ * whisper.cpp looks for it, and returns its path.
+ */
+export async function downloadEncoder(
+  modelPath: string,
+  onProgress?: (message: string) => void,
+  signal?: AbortSignal,
+): Promise<string> {
+  const name = basename(modelPath)
+    .replace(/^ggml-/, "")
+    .replace(/\.bin$/, "");
+  const encoder = catalogEncoder(name);
+  if (!encoder)
+    throw new Error(`There's no Core ML encoder to download for ${name}.`);
+  const folder = dirname(modelPath);
+  const target = join(folder, `ggml-${encoder.name}-encoder.mlmodelc`);
+  if (existsSync(target)) return target;
+  const zip = `${target}.zip`;
+  await downloadFile(
+    `${repository}/ggml-${encoder.name}-encoder.mlmodelc.zip`,
+    zip,
+    encoder,
+    progressMessage(`Core ML encoder for ${encoder.name}`, onProgress),
+    signal,
+  );
+  onProgress?.("Unpacking Core ML encoder…");
+  const unpacked = join(folder, `.ggml-${encoder.name}-encoder.${process.pid}`);
+  try {
+    await run("/usr/bin/ditto", ["-x", "-k", zip, unpacked], undefined, signal);
+    await rename(join(unpacked, basename(target)), target);
+    await rm(zip, { force: true });
+  } finally {
+    await rm(unpacked, { recursive: true, force: true });
+  }
   return target;
 }

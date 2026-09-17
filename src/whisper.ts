@@ -37,7 +37,12 @@ import {
   vttToText,
   whisperLanguageName,
 } from "./core";
-import { modelCatalog, modelsFolder } from "./models";
+import {
+  catalogEncoder,
+  downloadEncoder,
+  modelCatalog,
+  modelsFolder,
+} from "./models";
 
 /** Whether a WAV header already describes the 16 kHz mono 16-bit PCM audio whisper.cpp reads. */
 export function isWhisperWavHeader(header: Buffer): boolean {
@@ -144,6 +149,8 @@ export type WhisperModel = {
   size: number;
   /** The Core ML encoder this model still needs, when whisper.cpp was built with Core ML. */
   missingEncoder?: string;
+  /** The size of that encoder when it can be downloaded, which happens before the first transcription. */
+  encoderSize?: number;
 };
 
 export function modelName(path: string): string {
@@ -255,6 +262,7 @@ export async function whisperModels(settings: Settings): Promise<{
       name: modelName(path),
       size: info.size,
       missingEncoder: missing ? basename(encoder) : undefined,
+      encoderSize: missing ? catalogEncoder(modelName(path))?.size : undefined,
     });
   }
   const defaultModel =
@@ -289,6 +297,13 @@ async function whisperSetup(
     throw new Error(
       `${basename(model)} was not found. Choose another model, or download one in Manage Tools and Models.`,
     );
+  if (usesCoreMl(whisper) && !existsSync(coreMlEncoder(model))) {
+    if (!catalogEncoder(modelName(model)))
+      throw new Error(
+        `This whisper.cpp build uses Core ML, and ${modelName(model)} has no Core ML encoder (${basename(coreMlEncoder(model))}). Choose another model.`,
+      );
+    await downloadEncoder(model, onProgress, signal);
+  }
   return {
     whisper,
     model,
@@ -392,7 +407,7 @@ async function runWhisper(
       /failed to load Core ML model from '([^']+)'/.exec(error.message);
     if (coreMl)
       throw new Error(
-        `This whisper.cpp build uses Core ML, and ${modelName(model)} has no Core ML encoder (${basename(coreMl[1])}). Create it with ./models/generate-coreml-model.sh ${modelName(model).replace(/-q\d_\d$/, "")} in whisper.cpp, or choose another model.`,
+        `whisper.cpp couldn't load the Core ML encoder for ${modelName(model)} (${basename(coreMl[1])}). Move it to the Trash and try again to download it again, or choose another model.`,
       );
     if (
       vad &&

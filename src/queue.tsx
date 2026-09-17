@@ -57,6 +57,8 @@ export function jobNoun(spec: JobSpec): string {
       return "photo download";
     case "model":
       return "model download";
+    case "encoder":
+      return "Core ML encoder download";
     case "install":
       return "installation";
   }
@@ -220,6 +222,7 @@ function doneTitle(job: Job): string {
     case "images":
       return count > 1 ? `${count} photos saved` : "Photo saved";
     case "model":
+    case "encoder":
       return `${job.title} downloaded`;
     case "install":
       return `${job.spec.formulas.join(", ")} installed`;
@@ -237,7 +240,7 @@ export function savesMedia(job: Job): boolean {
 
 /** Whether a job's result is a file to open, rather than one only to show in Finder, like a model. */
 export function opensResult(job: Job): boolean {
-  return !["model", "install"].includes(job.spec.kind);
+  return !["model", "encoder", "install"].includes(job.spec.kind);
 }
 
 /** Whether a job saves transcripts, which can be copied as text. */

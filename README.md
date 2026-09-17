@@ -223,7 +223,11 @@ A checkout at `~/GitHub/whisper.cpp` is found automatically, along with the mode
 
 ### Core ML
 
-If you built whisper.cpp with Core ML (`-DWHISPER_COREML=1`), each model also needs its Core ML encoder, such as `ggml-large-v3-encoder.mlmodelc`, next to it. Models without one are marked **Needs Core ML encoder**. Create it with `./models/generate-coreml-model.sh large-v3`, or use a build without Core ML. Quantized models use the encoder of their base model.
+If you built whisper.cpp with Core ML (`-DWHISPER_COREML=1`), each model also needs its Core ML encoder next to it, such as `ggml-large-v3-encoder.mlmodelc`. Quantized models use the encoder of their base model.
+
+**Manage Tools and Models** marks models without one **Needs Core ML encoder**. Choose **Download Core ML Encoder** to download the prebuilt encoder from Hugging Face and unpack it next to the model. You don't have to do this first: when you transcribe with such a model, its encoder is downloaded before the transcription starts, and the **Model** dropdown says so. The first transcription with a new encoder takes longer while macOS prepares it for your Mac.
+
+Encoders can be downloaded for `large-v3-turbo`, `large-v3`, `medium`, `small` and `base`, and their quantized models. Other models need a build without Core ML, or an encoder you create with `./models/generate-coreml-model.sh` in whisper.cpp.
 
 ## Preferences
 
@@ -268,7 +272,7 @@ Some videos only play when you're signed in: age-restricted, private and members
 
 **The transcript repeats one line, or has text where nobody speaks.** Make sure **Voice Activity Detection** is on.
 
-**"needs Core ML encoder" or "failed to load Core ML model".** See [Core ML](#core-ml).
+**"needs Core ML encoder" or "couldn't load the Core ML encoder".** See [Core ML](#core-ml). If a downloaded encoder is damaged, move it to the Trash and transcribe again to download it again.
 
 **"large-v3-turbo can't translate".** Choose `large-v3`, `medium` or another model without "turbo" in its name.
 
@@ -288,7 +292,7 @@ Everything runs on your Mac. The extension talks only to:
 
 With **Browser Tab** on, the extension reads the address of your browser's current tab when you open **Download Video** from the browser. It isn't stored or sent anywhere.
 
-- Hugging Face, to download the Silero VAD model once, and the whisper models you choose.
+- Hugging Face, to download the Silero VAD model once, and the whisper models and Core ML encoders you choose.
 - Homebrew, when you install tools with it.
 
 Audio, video and transcripts never leave your computer. With Browser Sign-In on, yt-dlp reads your browser's cookies locally to talk to YouTube; they are not sent anywhere else.

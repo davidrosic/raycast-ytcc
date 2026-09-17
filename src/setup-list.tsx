@@ -13,7 +13,7 @@ import { basename, dirname } from "node:path";
 import { useEffect, useState } from "react";
 import { Settings, formatSize } from "./core";
 import { Job, cancelJob, isActive } from "./jobs";
-import { modelCatalog, modelsFolder } from "./models";
+import { catalogEncoder, modelCatalog, modelsFolder } from "./models";
 import { addToQueue, jobIcon, jobSubtitle, jobToast, useQueue } from "./queue";
 import { ToolStatus, homebrew, toolStatus } from "./setup";
 import { WhisperModel, saveDefaultModel, whisperModels } from "./whisper";
@@ -60,7 +60,7 @@ function useSetupState(settings: Settings) {
 
 /**
  * The tools the extension needs, with Homebrew installs, and whisper models to
- * download and choose as the default.
+ * download, choose as the default, and give Core ML encoders.
  */
 export function SetupList({ settings }: { settings: Settings }) {
   const setup = useSetupState(settings);
@@ -213,8 +213,13 @@ export function SetupList({ settings }: { settings: Settings }) {
     const info = modelCatalog.find((item) => item.name === name);
     const isDefault = Boolean(model && model.path === setup.defaultModel);
     const job = activeJob(
-      (job) => job.spec.kind === "model" && job.spec.name === name,
+      (job) =>
+        (job.spec.kind === "model" && job.spec.name === name) ||
+        (job.spec.kind === "encoder" && job.spec.path === model?.path),
     );
+    const encoder = model?.missingEncoder
+      ? catalogEncoder(model.name)
+      : undefined;
     const ownDownload = Boolean(
       model && folder && dirname(model.path) === folder,
     );
@@ -249,7 +254,9 @@ export function SetupList({ settings }: { settings: Settings }) {
                     value: "Needs Core ML encoder",
                     color: Color.Orange,
                   },
-                  tooltip: `${model.missingEncoder} is missing`,
+                  tooltip: encoder
+                    ? `${formatSize(encoder.size)} download, also downloaded before its first transcription`
+                    : `${model.missingEncoder} is missing`,
                 },
               ]
             : []),
@@ -297,6 +304,20 @@ export function SetupList({ settings }: { settings: Settings }) {
                     title: `${name} is the default model`,
                   });
                 }}
+              />
+            )}
+            {model && encoder && !job && (
+              <Action
+                title="Download Core ML Encoder"
+                icon={Icon.Download}
+                onAction={() =>
+                  addToQueue(settings, [
+                    {
+                      title: `Core ML encoder for ${encoder.name}`,
+                      spec: { kind: "encoder", path: model.path },
+                    },
+                  ])
+                }
               />
             )}
             {model && <Action.ShowInFinder path={model.path} />}

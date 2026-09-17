@@ -26,7 +26,7 @@ import {
   downloadPlaylistMedia,
   downloadPlaylistSubtitles,
 } from "./playlists";
-import { downloadModel } from "./models";
+import { downloadEncoder, downloadModel } from "./models";
 import { installWithHomebrew } from "./setup";
 import {
   TranscriptionOptions,
@@ -47,6 +47,8 @@ export type JobSpec =
   | { kind: "images"; video: VideoRef }
   /** A whisper model from the catalog, downloaded into `folder`. */
   | { kind: "model"; name: string; folder: string }
+  /** The Core ML encoder for the model at `path`. */
+  | { kind: "encoder"; path: string }
   | { kind: "install"; formulas: string[] };
 
 export type JobStatus = "queued" | "running" | "done" | "failed" | "canceled";
@@ -377,6 +379,10 @@ async function perform(
           await downloadModel(spec.name, spec.folder, onProgress, signal),
         ],
       };
+    case "encoder":
+      return {
+        outputs: [await downloadEncoder(spec.path, onProgress, signal)],
+      };
     case "install":
       await installWithHomebrew(spec.formulas, onProgress, signal);
       return {};
@@ -496,7 +502,7 @@ export function queueSummary(jobs: Job[]): string | undefined {
   const groups: [JobSpec["kind"][], string][] = [
     [["file", "video"], "transcription"],
     [["media", "images"], "download"],
-    [["model"], "model download"],
+    [["model", "encoder"], "model download"],
   ];
   for (const [kinds, noun] of groups) {
     const group = jobs.filter((job) => kinds.includes(job.spec.kind));

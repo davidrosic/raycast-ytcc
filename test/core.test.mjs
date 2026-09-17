@@ -853,6 +853,9 @@ test("describes tools, Homebrew output and model downloads", () => {
     ),
     "No formulae or casks found for x.",
   );
+  assert.equal(core.baseModelName("large-v3-turbo-q5_0"), "large-v3-turbo");
+  assert.equal(core.catalogEncoder("large-v3-q5_0").name, "large-v3");
+  assert.equal(core.catalogEncoder("base.en"), undefined);
   assert.equal(
     core.coreMlEncoder("/m/ggml-medium-q5_0.bin"),
     "/m/ggml-medium-encoder.mlmodelc",
