@@ -36,8 +36,8 @@ type ExtensionPreferences = {
 declare type Preferences = ExtensionPreferences
 
 declare namespace Preferences {
-  /** Preferences accessible in the `youtube-download` command */
-  export type YoutubeDownload = ExtensionPreferences & {}
+  /** Preferences accessible in the `download-video` command */
+  export type DownloadVideo = ExtensionPreferences & {}
   /** Preferences accessible in the `transcribe-selected-files` command */
   export type TranscribeSelectedFiles = ExtensionPreferences & {}
   /** Preferences accessible in the `transcription-queue` command */
@@ -47,8 +47,8 @@ declare namespace Preferences {
 }
 
 declare namespace Arguments {
-  /** Arguments passed to the `youtube-download` command */
-  export type YoutubeDownload = {}
+  /** Arguments passed to the `download-video` command */
+  export type DownloadVideo = {}
   /** Arguments passed to the `transcribe-selected-files` command */
   export type TranscribeSelectedFiles = {}
   /** Arguments passed to the `transcription-queue` command */

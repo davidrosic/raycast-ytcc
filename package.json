@@ -14,8 +14,8 @@
   ],
   "commands": [
     {
-      "name": "youtube-download",
-      "title": "YouTube Download",
+      "name": "download-video",
+      "title": "Download Video",
       "subtitle": "Subtitles, audio & video",
       "description": "Download subtitles in any language from a YouTube video, playlist or channel, or audio and video from YouTube, Instagram, X and other sites",
       "mode": "view"

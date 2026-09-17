@@ -31,7 +31,7 @@ The extension finds these tools in your `PATH`, `/opt/homebrew/bin`, or `/usr/lo
 
 | Command                       | What it does                                                                                                                                |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| **YouTube Download**          | Subtitles, audio and video for a YouTube link, subtitles for a playlist or channel, audio and video from other sites, or a pasted file path |
+| **Download Video**            | Subtitles, audio and video for a YouTube link, subtitles for a playlist or channel, audio and video from other sites, or a pasted file path |
 | **Transcribe Selected Files** | Transcribes the files or folders selected in Finder                                                                                         |
 | **Queue**                     | Running, queued and finished transcriptions and playlist downloads, with Cancel and results                                                 |
 | **Queue in Menu Bar**         | Shows progress in the menu bar while the queue is running                                                                                   |
@@ -39,7 +39,7 @@ The extension finds these tools in your `PATH`, `/opt/homebrew/bin`, or `/usr/lo
 ## How to use it
 
 1. Copy a YouTube link.
-2. Open **YouTube Download**. The link is placed in the search bar and the video starts loading.
+2. Open **Download Video**. The link is placed in the search bar and the video starts loading.
 3. Check the thumbnail and title in the side panel.
 4. Choose a subtitle format from the dropdown (⌘P). **RAW** is selected by default.
 5. Select a language and press ↵.
@@ -87,7 +87,7 @@ Press ⌘K, choose **Edit Favorite Languages**, and enter names or codes separat
 
 ### Playlists and channels
 
-Paste a playlist or channel link into **YouTube Download**. The list shows **Download Subtitles for N Videos** and every video in it; press ↵ on a video to open it on its own.
+Paste a playlist or channel link into **Download Video**. The list shows **Download Subtitles for N Videos** and every video in it; press ↵ on a video to open it on its own.
 
 Press ↵ on **Download Subtitles for N Videos** and choose:
 
@@ -131,7 +131,7 @@ Folders are searched, including subfolders, for audio and video files. If nothin
 
 Assign the command a hotkey or alias in Raycast settings to transcribe the selection with a single shortcut.
 
-### From YouTube Download
+### From Download Video
 
 Paste the full path of an audio or video file or a folder into the search bar, for example `/Users/you/Recordings/interview.m4a`. To copy a path in Finder, select the file and press ⌥⌘C. Paths starting with `~/`, paths in quotes, and paths with backslash-escaped spaces copied from Terminal also work. The same form opens.
 
@@ -238,7 +238,7 @@ Some videos only play when you're signed in: age-restricted, private and members
 
 **"yt-dlp was not found" or "ffmpeg was not found".** Install them with `brew install yt-dlp ffmpeg`, or set their paths in the preferences.
 
-**A video won't load or download.** YouTube changes often, and old yt-dlp versions stop working. When a newer yt-dlp is available, **YouTube Download** says so and offers **Update yt-dlp**. It runs `brew upgrade yt-dlp`, `pipx upgrade yt-dlp`, `pip install --upgrade yt-dlp` or `yt-dlp -U`, depending on how yt-dlp was installed. The newest version is checked on GitHub at most twice a day.
+**A video won't load or download.** YouTube changes often, and old yt-dlp versions stop working. When a newer yt-dlp is available, **Download Video** says so and offers **Update yt-dlp**. It runs `brew upgrade yt-dlp`, `pipx upgrade yt-dlp`, `pip install --upgrade yt-dlp` or `yt-dlp -U`, depending on how yt-dlp was installed. The newest version is checked on GitHub at most twice a day.
 
 **"This video is age-restricted", "only for channel members", or "Instagram only shows this to signed-in accounts".** Turn on [Browser Sign-In](#browser-sign-in).
 

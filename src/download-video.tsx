@@ -439,7 +439,7 @@ export default function Command() {
       searchText={search.text}
       onSearchTextChange={search.onChange}
       navigationTitle={
-        playlist?.title || video?.title || preview.title || "YouTube Download"
+        playlist?.title || video?.title || preview.title || "Download Video"
       }
       searchBarPlaceholder={
         url
