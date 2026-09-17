@@ -10,7 +10,8 @@ const temporary = mkdtempSync(join(tmpdir(), "raycast-core-test-"));
 const compiled = join(temporary, "core.cjs");
 require("esbuild").buildSync({
   stdin: {
-    contents: 'export * from "./src/core"; export * from "./src/whisper";',
+    contents:
+      'export * from "./src/core"; export * from "./src/whisper"; export * from "./src/updates";',
     resolveDir: process.cwd(),
     loader: "ts",
   },
@@ -354,4 +355,51 @@ test("uses browser sign-in only when chosen and explains sign-in errors", () => 
   assert.match(explain("HTTP Error 429: Too Many Requests"), /HTTP Error 429/);
   const canceled = core.canceledError();
   assert.equal(core.explainYtDlpError(canceled, {}), canceled);
+});
+
+test("compares yt-dlp versions and picks the update command", () => {
+  const updates = require(compiled);
+  assert.equal(updates.compareVersions("2026.08.19", "2026.09.01"), -1);
+  assert.equal(updates.compareVersions("2026.9.1", "2026.09.01"), 0);
+  assert.equal(updates.compareVersions("2026.09.01.1", "2026.09.01"), 1);
+  assert.deepEqual(
+    updates.updateCommand(
+      "/opt/homebrew/bin/yt-dlp",
+      "/opt/homebrew/Cellar/yt-dlp/2026.8.19_1/bin/yt-dlp",
+      "#!/opt/homebrew/Cellar/yt-dlp/2026.8.19_1/libexec/bin/python",
+    ).args,
+    ["upgrade", "yt-dlp"],
+  );
+  assert.equal(
+    updates.updateCommand(
+      "/opt/homebrew/bin/yt-dlp",
+      "/opt/homebrew/Cellar/yt-dlp/2026.8.19_1/bin/yt-dlp",
+      "",
+    ).bin,
+    "/opt/homebrew/bin/brew",
+  );
+  assert.equal(
+    updates.updateCommand(
+      "/u/.local/bin/yt-dlp",
+      "/u/.local/pipx/venvs/yt-dlp/bin/yt-dlp",
+      "#!/u/.local/pipx/venvs/yt-dlp/bin/python",
+    ).display,
+    "pipx upgrade yt-dlp",
+  );
+  assert.equal(
+    updates.updateCommand(
+      "/usr/local/bin/yt-dlp",
+      "/usr/local/bin/yt-dlp",
+      "#!/usr/bin/env python3",
+    ).display,
+    "python3 -m pip install --upgrade yt-dlp",
+  );
+  assert.deepEqual(
+    updates.updateCommand(
+      "/usr/local/bin/yt-dlp",
+      "/usr/local/bin/yt-dlp",
+      "Ïúíþ",
+    ).args,
+    ["-U"],
+  );
 });

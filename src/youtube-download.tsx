@@ -1,6 +1,7 @@
 import {
   Action,
   ActionPanel,
+  Color,
   Form,
   Icon,
   List,
@@ -58,6 +59,7 @@ import {
   videoDetail,
 } from "./video";
 import { TranscriptionOptions, modelName } from "./whisper";
+import { useYtDlpUpdate } from "./ytdlp-update";
 
 export { runQueueWorker } from "./jobs";
 
@@ -96,6 +98,7 @@ export default function Command() {
     jobToast(job, showQueue);
   });
   const [selectedFormat, setSelectedFormat] = useState<ExportFormat>("raw");
+  const ytDlp = useYtDlpUpdate(settings);
   const download = useRef<AbortController | undefined>(undefined);
 
   /** Runs one download at a time with a toast that can cancel it. */
@@ -288,6 +291,18 @@ export default function Command() {
     matches(value, subtitle, value === "mp4" ? "video" : "audio"),
   );
 
+  const updateAction = ytDlp.outdated && (
+    <Action
+      // yt-dlp is always written in lowercase
+      // eslint-disable-next-line @raycast/prefer-title-case
+      title="Update yt-dlp"
+      icon={Icon.ArrowClockwise}
+      onAction={ytDlp.update}
+    />
+  );
+  const updateNote = ytDlp.outdated
+    ? `yt-dlp ${ytDlp.current} is out of date, and YouTube downloads often fail with old versions. Version ${ytDlp.latest} is available.`
+    : undefined;
   const moreActions = (
     <ActionPanel.Section>
       {busy && (
@@ -410,10 +425,40 @@ export default function Command() {
         description={
           url
             ? "Clear the search to see everything, or paste another link."
-            : "A YouTube link in your clipboard is searched when the command opens, and a pasted link is searched right away. Links from other sites: paste, then press Return. To transcribe an audio or video file, paste its full path."
+            : updateNote
+              ? `${updateNote} Press ↵ to update it.`
+              : "A YouTube link in your clipboard is searched when the command opens, and a pasted link is searched right away. Links from other sites: paste, then press Return. To transcribe an audio or video file, paste its full path."
         }
-        actions={<ActionPanel>{moreActions}</ActionPanel>}
+        actions={
+          <ActionPanel>
+            {!url && updateAction}
+            {moreActions}
+          </ActionPanel>
+        }
       />
+      {url && updateNote && (
+        <List.Section title="yt-dlp Update">
+          <List.Item
+            title="Update yt-dlp"
+            subtitle={`${ytDlp.current} → ${ytDlp.latest}`}
+            icon={{ source: Icon.ArrowClockwise, tintColor: Color.Orange }}
+            detail={
+              <List.Item.Detail
+                markdown={detailMarkdown({
+                  title: "Update yt-dlp",
+                  note: updateNote,
+                })}
+              />
+            }
+            actions={
+              <ActionPanel>
+                {updateAction}
+                {moreActions}
+              </ActionPanel>
+            }
+          />
+        </List.Section>
+      )}
       {pendingUrl && (
         <List.Item
           title="Search This Link"
@@ -544,6 +589,7 @@ export default function Command() {
           detail={videoDetail(state)}
           actions={
             <ActionPanel>
+              {error && updateAction}
               {error && (
                 <Action
                   title="Try Again"

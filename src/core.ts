@@ -653,9 +653,15 @@ export async function run(
   args: string[],
   onProgress?: (line: string) => void,
   signal?: AbortSignal,
+  env?: NodeJS.ProcessEnv,
 ): Promise<string> {
   return await new Promise((done, fail) => {
-    const child = spawn(bin, args, { shell: false, windowsHide: true, signal });
+    const child = spawn(bin, args, {
+      shell: false,
+      windowsHide: true,
+      signal,
+      env: env ?? process.env,
+    });
     let stdout = "";
     let stderr = "";
     const lines = (onLine: (line: string) => void) => {
