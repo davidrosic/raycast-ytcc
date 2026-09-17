@@ -188,7 +188,7 @@ export default function Command() {
 
   function media(format: MediaFormat) {
     if (!video) return;
-    const { id, title, url, items, isLive } = video;
+    const { id, title, url, items, isLive, photos } = video;
     addToQueue(
       settings,
       [
@@ -196,8 +196,26 @@ export default function Command() {
           title,
           spec: {
             kind: "media",
-            video: { id, title, url, items, isLive },
+            video: { id, title, url, items, isLive, photos },
             format,
+          },
+        },
+      ],
+      showQueue,
+    );
+  }
+
+  function downloadPhotos() {
+    if (!video) return;
+    const { id, title, url, items, isLive, photos } = video;
+    addToQueue(
+      settings,
+      [
+        {
+          title,
+          spec: {
+            kind: "images",
+            video: { id, title, url, items, isLive, photos },
           },
         },
       ],
@@ -211,7 +229,7 @@ export default function Command() {
 
   function queueVideo(options: TranscriptionOptions) {
     if (!video) return;
-    const { id, title, url, items, isLive } = video;
+    const { id, title, url, items, isLive, photos } = video;
     addToQueue(
       settings,
       [
@@ -219,7 +237,7 @@ export default function Command() {
           title,
           spec: {
             kind: "video",
-            video: { id, title, url, items, isLive },
+            video: { id, title, url, items, isLive, photos },
             options,
           },
         },
@@ -299,6 +317,12 @@ export default function Command() {
         job.spec.video.id === video?.id &&
         job.spec.format === format,
     );
+  const photosJob = queue.jobs.find(
+    (job) =>
+      isActive(job) &&
+      job.spec.kind === "images" &&
+      job.spec.video.id === video?.id,
+  );
   const playlistMediaJob = (format: MediaFormat) =>
     queue.jobs.find(
       (job) =>
@@ -926,6 +950,7 @@ export default function Command() {
       {video &&
         !filePath &&
         !video.captions.length &&
+        !video.noVideo &&
         matches("whisper transcribe") && (
           <List.Section title="No Captions Available">
             <List.Item
@@ -997,7 +1022,7 @@ export default function Command() {
           {suggestions.map(item)}
         </List.Section>
       )}
-      {video && !filePath && mediaItems.length > 0 && (
+      {video && !filePath && !video.noVideo && mediaItems.length > 0 && (
         <List.Section title="Audio & Video">
           {mediaItems.map(({ value, subtitle }) => {
             const job = mediaJob(value);
@@ -1040,6 +1065,66 @@ export default function Command() {
               />
             );
           })}
+        </List.Section>
+      )}
+      {video?.images && !filePath && matches("photos images pictures") && (
+        <List.Section title="Photos">
+          <List.Item
+            title={
+              video.images.length > 1
+                ? `Download ${video.images.length} Photos`
+                : "Download Photo"
+            }
+            subtitle={photosJob ? jobSubtitle(photosJob) : "Full resolution"}
+            icon={Icon.Image}
+            detail={
+              <List.Item.Detail
+                markdown={detailMarkdown({
+                  // X serves a smaller size for the preview.
+                  image: video.images[0].url.replace(
+                    /name=orig$/,
+                    "name=small",
+                  ),
+                  title: video.title,
+                  facts: [
+                    ...(video.channel
+                      ? [{ title: "Account", text: video.channel }]
+                      : []),
+                    {
+                      title: "Photos",
+                      text:
+                        video.images.length > 1
+                          ? `${video.images.length}, each saved as its own file`
+                          : "1",
+                    },
+                    ...(video.images[0].width && video.images[0].height
+                      ? [
+                          {
+                            title: "Size",
+                            text: `${video.images[0].width} × ${video.images[0].height}${video.images.length > 1 ? " (first photo)" : ""}`,
+                          },
+                        ]
+                      : []),
+                  ],
+                })}
+              />
+            }
+            actions={
+              <ActionPanel>
+                {photosJob && cancelAction(photosJob)}
+                <Action
+                  title={
+                    video.images.length > 1
+                      ? "Download Photos"
+                      : "Download Photo"
+                  }
+                  icon={Icon.Download}
+                  onAction={downloadPhotos}
+                />
+                {moreActions}
+              </ActionPanel>
+            }
+          />
         </List.Section>
       )}
       {manual.length > 0 && (

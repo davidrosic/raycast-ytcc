@@ -746,3 +746,82 @@ test("reads the frontmost tab only from browsers", () => {
   );
   assert.equal(core.browserTabScript("org.mozilla.firefox"), undefined);
 });
+
+test("finds photos in Instagram and X posts", () => {
+  const photo = (url) => ({
+    formats: [],
+    thumbnails: [
+      { url: `${url}?small` },
+      { url: `${url}`, width: 1080, height: 1350 },
+    ],
+  });
+  const single = core.parseVideo(
+    { id: "BsOGulcndj-", title: "Video by egg", ...photo("https://i/1.jpg") },
+    "https://www.instagram.com/p/BsOGulcndj-/",
+  );
+  assert.equal(single.noVideo, true);
+  assert.equal(single.title, "Post by egg");
+  assert.deepEqual(single.images, [
+    { url: "https://i/1.jpg", width: 1080, height: 1350 },
+  ]);
+  const mixed = core.parseVideo(
+    {
+      _type: "playlist",
+      id: "C1",
+      title: "Post by nasa",
+      entries: [
+        photo("https://i/1.jpg"),
+        { formats: [{}], duration: 12 },
+        photo("https://i/2.jpg"),
+        { formats: [{}], duration: 30 },
+      ],
+    },
+    "u",
+  );
+  assert.equal(mixed.items, 2);
+  assert.equal(mixed.photos, 2);
+  assert.equal(mixed.noVideo, undefined);
+  assert.equal(mixed.title, "Post by nasa");
+  const video = core.parseVideo(
+    { id: "x", title: "t", formats: [{}], duration: 5 },
+    "u",
+  );
+  assert.equal(video.images, undefined);
+
+  assert.equal(
+    core.xStatusId("https://x.com/TheEllenShow/status/440322224407314432?s=20"),
+    "440322224407314432",
+  );
+  assert.equal(core.xStatusId("https://www.instagram.com/p/abc/"), undefined);
+  const post = core.parseXPost(
+    {
+      id_str: "440322224407314432",
+      text: "If only Bradley's arm was longer. Best photo ever. #oscars http://t.co/C9U5NOtGa",
+      created_at: "2014-03-03T03:06:13.000Z",
+      user: { name: "Ellen", screen_name: "TheEllenShow" },
+      mediaDetails: [
+        {
+          type: "photo",
+          media_url_https: "https://pbs.twimg.com/media/BhxWutnCEAAtEQ6.jpg",
+          original_info: { width: 1920, height: 1080 },
+        },
+        { type: "video", media_url_https: "https://pbs.twimg.com/v.jpg" },
+      ],
+    },
+    "https://x.com/TheEllenShow/status/440322224407314432",
+  );
+  assert.equal(
+    post.title,
+    "Ellen - If only Bradley's arm was longer. Best photo ever. #oscars",
+  );
+  assert.deepEqual(post.images, [
+    {
+      url: "https://pbs.twimg.com/media/BhxWutnCEAAtEQ6.jpg?name=orig",
+      width: 1920,
+      height: 1080,
+    },
+  ]);
+  assert.equal(post.channel, "@TheEllenShow");
+  assert.equal(post.uploadDate, "2014-03-03");
+  assert.equal(core.parseXPost({ text: "no id" }, "u"), undefined);
+});

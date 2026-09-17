@@ -8,6 +8,7 @@ Save YouTube subtitles in any available language as RAW text, clean text, SRT or
 - **Whole playlists and channels.** Subtitles, MP3, M4A or MP4 for every video, with videos already downloaded skipped.
 - **Your languages first.** Favorite languages are listed at the top, and `serbian`, `Serbian` and `serbian (orig)` all match the same language.
 - **Audio and video from most sites.** Save MP3, M4A or MP4 in the best available quality, including every video in an X post or Instagram carousel.
+- **Photos from Instagram and X.** Save every photo in a post at full resolution.
 - **Transcribe your own files.** Select recordings or folders in Finder, pick the language, output and model, and press ⌘↵.
 - **Keeps running when Raycast closes.** Audio and video downloads, playlist downloads and transcriptions run in a background queue, with progress in the menu bar and a Cancel action.
 - **No invented text in silence.** Silero voice activity detection skips silence and music, which stops whisper from repeating made-up lines.
@@ -124,8 +125,9 @@ Files are named `Video Title [videoId].mp3`, `.m4a` or `.mp4`.
 
 Audio and video downloads work the same way on every site yt-dlp supports: paste the link, check the thumbnail and title, and press ↵ on MP3, M4A or MP4. On X the title is the post's text, and on Instagram it's "Video by" and the account name.
 
-- **Posts with several videos**, such as X posts and Instagram carousels, save every video as its own file: `Title [postId] 1.mp4`, `Title [postId] 2.mp4`. Photos in a carousel are skipped. The row shows how many videos the post has.
-- **Posts without video**, such as a text-only X post, say so instead of downloading.
+- **Posts with several videos**, such as X posts and Instagram carousels, save every video as its own file: `Title [postId] 1.mp4`, `Title [postId] 2.mp4`. The row shows how many videos the post has.
+- **Photos** in Instagram and X posts appear under **Photos**. Press ↵ on **Download 4 Photos** to save each one at full resolution, as `Title [postId] 1.jpg` and so on. Posts with only photos show just that row.
+- **Posts without video or photos**, such as a text-only X post, say so instead of downloading.
 - **Videos without sound** download as MP4; MP3 and M4A say the video has no audio.
 - **Live streams** can be downloaded after they end.
 - **Sign-in:** Instagram shows many posts only to signed-in accounts, and X sometimes limits downloads without an account. Turn on [Browser Sign-In](#browser-sign-in) with the browser you use those sites in.
@@ -280,6 +282,7 @@ Some videos only play when you're signed in: age-restricted, private and members
 Everything runs on your Mac. The extension talks only to:
 
 - YouTube, or the site a link is from, for video details, thumbnails, subtitles, audio and video.
+- X's embed service (`cdn.syndication.twimg.com`), for the photos in X posts.
 - GitHub, to check the newest yt-dlp version at most twice a day.
 
 With **Browser Tab** on, the extension reads the address of your browser's current tab when you open **Download Video** from the browser. It isn't stored or sent anywhere.

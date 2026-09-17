@@ -52,6 +52,8 @@ export function jobNoun(spec: JobSpec): string {
     case "media":
     case "playlist-media":
       return `${spec.format.toUpperCase()} download`;
+    case "images":
+      return "photo download";
   }
 }
 
@@ -209,11 +211,18 @@ function doneTitle(job: Job): string {
       const format = job.spec.format.toUpperCase();
       return count > 1 ? `${count} ${format} files saved` : `${format} saved`;
     }
+    case "images":
+      return count > 1 ? `${count} photos saved` : "Photo saved";
     default:
       return count > 1
         ? `${count} transcriptions saved`
         : "Transcription saved";
   }
+}
+
+/** Whether a job saves audio, video or photos. */
+export function savesMedia(job: Job): boolean {
+  return job.spec.kind === "media" || job.spec.kind === "images";
 }
 
 /** Whether a job saves transcripts, which can be copied as text. */
@@ -259,7 +268,7 @@ export function jobToast(job: Job, showQueue?: () => void) {
                   shortcut: Keyboard.Shortcut.Common.Copy,
                   onAction: () => copyText(outputs),
                 }
-              : job.spec.kind === "media"
+              : savesMedia(job)
                 ? {
                     title: "Show in Finder",
                     onAction: () => showInFinder(output),
@@ -369,7 +378,7 @@ export function QueueList({
               </ActionPanel.Section>
             ) : (
               <ActionPanel.Section>
-                {output && job.spec.kind === "media" && (
+                {output && savesMedia(job) && (
                   <>
                     <Action.Open title="Open File" target={output} />
                     <Action.ShowInFinder path={output} />

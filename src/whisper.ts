@@ -527,7 +527,7 @@ export async function transcribeVideo(
           "--no-playlist",
           "--newline",
           // A photo in a carousel shouldn't stop the videos around it.
-          ...(video.items ? ["--ignore-errors"] : []),
+          ...(video.items || video.photos ? ["--ignore-errors"] : []),
           "-f",
           "bestaudio/best",
           "-o",

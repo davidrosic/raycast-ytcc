@@ -13,7 +13,13 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
-import { MediaFormat, Settings, VideoRef, downloadMedia } from "./core";
+import {
+  MediaFormat,
+  Settings,
+  VideoRef,
+  downloadImages,
+  downloadMedia,
+} from "./core";
 import {
   PlaylistDownload,
   PlaylistMediaDownload,
@@ -35,7 +41,8 @@ export type JobSpec =
     }
   | ({ kind: "playlist" } & PlaylistDownload)
   | ({ kind: "playlist-media" } & PlaylistMediaDownload)
-  | { kind: "media"; video: VideoRef; format: MediaFormat };
+  | { kind: "media"; video: VideoRef; format: MediaFormat }
+  | { kind: "images"; video: VideoRef };
 
 export type JobStatus = "queued" | "running" | "done" | "failed" | "canceled";
 
@@ -357,6 +364,10 @@ async function perform(
       );
     case "playlist-media":
       return await downloadPlaylistMedia(spec, settings, onProgress, signal);
+    case "images":
+      return {
+        outputs: await downloadImages(spec.video, settings, onProgress, signal),
+      };
     case "media":
       return {
         outputs: await downloadMedia(
@@ -468,7 +479,7 @@ export function queueSummary(jobs: Job[]): string | undefined {
   const parts: string[] = [];
   const groups: [JobSpec["kind"][], string][] = [
     [["file", "video"], "transcription"],
-    [["media"], "download"],
+    [["media", "images"], "download"],
   ];
   for (const [kinds, noun] of groups) {
     const group = jobs.filter((job) => kinds.includes(job.spec.kind));

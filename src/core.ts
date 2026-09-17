@@ -34,9 +34,19 @@ export type Video = {
   /** How many videos a post has, when it has several, such as an Instagram carousel. */
   items?: number;
   isLive?: boolean;
+  /** Photos in the post, largest size first found. */
+  images?: PostImage[];
+  /** How many photos the post has. */
+  photos?: number;
+  /** The post has photos but no video. */
+  noVideo?: boolean;
 };
+export type PostImage = { url: string; width?: number; height?: number };
 /** What a queued job needs to know about a video. */
-export type VideoRef = Pick<Video, "id" | "title" | "url" | "items" | "isLive">;
+export type VideoRef = Pick<
+  Video,
+  "id" | "title" | "url" | "items" | "isLive" | "photos"
+>;
 export type VideoPreview = {
   title?: string;
   channel?: string;
@@ -727,11 +737,44 @@ export function parseVideo(data: unknown, url: string): Video {
           Boolean(entry) && typeof entry === "object",
       )
     : [];
+  // With --ignore-no-formats-error, photos in an Instagram post come back as
+  // entries without formats or a duration, with the photo as thumbnails.
+  const isPhoto = (entry: Record<string, unknown>) =>
+    Array.isArray(entry.formats) &&
+    entry.formats.length === 0 &&
+    !entry.url &&
+    typeof entry.duration !== "number";
+  const videos = entries.length
+    ? entries.filter((entry) => !isPhoto(entry))
+    : isPhoto(info)
+      ? []
+      : [info];
+  const images = (entries.length ? entries : [info])
+    .filter(isPhoto)
+    .map((entry): PostImage | undefined => {
+      const best = (Array.isArray(entry.thumbnails) ? entry.thumbnails : [])
+        .filter(
+          (thumbnail): thumbnail is Record<string, unknown> =>
+            Boolean(thumbnail) &&
+            typeof thumbnail === "object" &&
+            /^https:\/\//.test(String(thumbnail.url)),
+        )
+        .at(-1);
+      return best
+        ? {
+            url: String(best.url),
+            width: typeof best.width === "number" ? best.width : undefined,
+            height: typeof best.height === "number" ? best.height : undefined,
+          }
+        : undefined;
+    })
+    .filter((image): image is PostImage => Boolean(image));
+  const noVideo = !videos.length && images.length > 0;
   const thumbnail = text(info.thumbnail) ?? text(entries[0]?.thumbnail);
   const uploadDate = text(info.upload_date);
   return {
     id: info.id,
-    title: info.title,
+    title: noVideo ? info.title.replace(/^Video by /, "Post by ") : info.title,
     url,
     captions,
     thumbnail:
@@ -745,9 +788,99 @@ export function parseVideo(data: unknown, url: string): Video {
       uploadDate && /^\d{8}$/.test(uploadDate)
         ? `${uploadDate.slice(0, 4)}-${uploadDate.slice(4, 6)}-${uploadDate.slice(6)}`
         : undefined,
-    items: entries.length > 1 ? entries.length : undefined,
+    items: videos.length > 1 ? videos.length : undefined,
     isLive: info.is_live === true || info.live_status === "is_live",
+    images: images.length ? images : undefined,
+    photos: images.length || undefined,
+    noVideo: noVideo || undefined,
   };
+}
+
+/** The ID of an X post link, such as `x.com/nasa/status/123`. */
+export function xStatusId(input: string): string | undefined {
+  if (videoSite(input) !== "X") return undefined;
+  return /\/status(?:es)?\/(\d+)/.exec(parseLink(input)?.pathname ?? "")?.[1];
+}
+
+/**
+ * Reads an X post from the embed data X serves without an account. yt-dlp
+ * skips photos, so they are found here, at their original size.
+ */
+export function parseXPost(data: unknown, url: string): Video | undefined {
+  if (!data || typeof data !== "object") return undefined;
+  const post = data as {
+    id_str?: unknown;
+    text?: unknown;
+    created_at?: unknown;
+    user?: { name?: unknown; screen_name?: unknown };
+    mediaDetails?: {
+      type?: unknown;
+      media_url_https?: unknown;
+      original_info?: { width?: unknown; height?: unknown };
+    }[];
+  };
+  if (typeof post.id_str !== "string") return undefined;
+  const images = (Array.isArray(post.mediaDetails) ? post.mediaDetails : [])
+    .filter(
+      (media) =>
+        media?.type === "photo" &&
+        typeof media.media_url_https === "string" &&
+        media.media_url_https.startsWith("https://"),
+    )
+    .map((media) => ({
+      url: `${media.media_url_https}?name=orig`,
+      width:
+        typeof media.original_info?.width === "number"
+          ? media.original_info.width
+          : undefined,
+      height:
+        typeof media.original_info?.height === "number"
+          ? media.original_info.height
+          : undefined,
+    }));
+  const name =
+    typeof post.user?.name === "string" ? post.user.name.trim() : undefined;
+  const text =
+    typeof post.text === "string"
+      ? post.text
+          .replace(/https?:\/\/t\.co\/\w+/g, "")
+          .replace(/\s+/g, " ")
+          .trim()
+      : "";
+  const short = text.length > 72 ? `${text.slice(0, 71).trimEnd()}…` : text;
+  const created =
+    typeof post.created_at === "string" ? new Date(post.created_at) : undefined;
+  return {
+    id: post.id_str,
+    title: [name, short].filter(Boolean).join(" - ") || `Post ${post.id_str}`,
+    url,
+    captions: [],
+    thumbnail: images[0] && images[0].url.replace(/name=orig$/, "name=small"),
+    channel:
+      typeof post.user?.screen_name === "string"
+        ? `@${post.user.screen_name}`
+        : undefined,
+    uploadDate:
+      created && !Number.isNaN(created.getTime())
+        ? created.toISOString().slice(0, 10)
+        : undefined,
+    images: images.length ? images : undefined,
+    photos: images.length || undefined,
+    noVideo: images.length ? true : undefined,
+  };
+}
+
+async function fetchXPost(id: string, signal?: AbortSignal): Promise<unknown> {
+  // The token the embed widget sends, derived from the post ID.
+  const token = ((Number(id) / 1e15) * Math.PI)
+    .toString(36)
+    .replace(/(0+|\.)/g, "");
+  const response = await fetch(
+    `https://cdn.syndication.twimg.com/tweet-result?id=${id}&token=${token}&lang=en`,
+    { signal },
+  );
+  if (!response.ok) throw new Error(`X returned HTTP ${response.status}`);
+  return await response.json();
 }
 
 export function youtubeThumbnail(input: string): string | undefined {
@@ -1031,13 +1164,91 @@ export async function inspectMedia(
   signal?: AbortSignal,
 ): Promise<Video> {
   const url = mediaUrl(urlInput);
-  const output = await runYtDlp(
-    settings,
-    ["--dump-single-json", "--skip-download", "--no-playlist", url],
-    undefined,
-    signal,
-  );
-  return parseVideo(JSON.parse(output), url);
+  const statusId = xStatusId(url);
+  const xPost = statusId
+    ? fetchXPost(statusId, signal).then(
+        (data) => parseXPost(data, url),
+        () => undefined,
+      )
+    : undefined;
+  let video: Video;
+  try {
+    const output = await runYtDlp(
+      settings,
+      [
+        "--dump-single-json",
+        "--skip-download",
+        "--no-playlist",
+        // Instagram posts with only photos are read instead of failing.
+        ...(videoSite(url) === "Instagram"
+          ? ["--ignore-no-formats-error"]
+          : []),
+        url,
+      ],
+      undefined,
+      signal,
+    );
+    video = parseVideo(JSON.parse(output), url);
+  } catch (error) {
+    const post = await xPost;
+    if (
+      post?.images &&
+      error instanceof Error &&
+      error.message === "This post has no video."
+    )
+      return post;
+    throw error;
+  }
+  const post = await xPost;
+  return post?.images
+    ? { ...video, images: post.images, photos: post.photos }
+    : video;
+}
+
+function imageExtension(type: string | null, url: string): string {
+  const fromType = /^image\/(jpe?g|png|webp|gif|heic|avif)/i.exec(type ?? "");
+  if (fromType) return fromType[1].toLowerCase().replace("jpeg", "jpg");
+  const fromUrl = /\.(jpe?g|png|webp|gif|heic|avif)(?:$|[?#])/i.exec(url);
+  return fromUrl ? fromUrl[1].toLowerCase().replace("jpeg", "jpg") : "jpg";
+}
+
+/**
+ * Downloads the photos in a post at full size. The post is read again, since
+ * photo links from Instagram expire.
+ */
+export async function downloadImages(
+  video: VideoRef,
+  settings: Settings,
+  onProgress?: (message: string) => void,
+  signal?: AbortSignal,
+): Promise<string[]> {
+  onProgress?.("Finding photos…");
+  const { images = [] } = await inspectMedia(video.url, settings, signal);
+  if (!images.length) throw new Error("This post has no photos.");
+  const destination = await outputDirectory(settings);
+  const stem = `${safeName(video.title)} [${video.id}]`;
+  const targets: string[] = [];
+  for (const [index, image] of images.entries()) {
+    onProgress?.(
+      images.length > 1
+        ? `Downloading photo ${index + 1} of ${images.length}… ${Math.floor((index / images.length) * 100)}%`
+        : "Downloading photo…",
+    );
+    const response = await fetch(image.url, { signal });
+    if (!response.ok)
+      throw new Error(
+        `Photo ${index + 1} couldn't be downloaded (HTTP ${response.status}).`,
+      );
+    const data = Buffer.from(await response.arrayBuffer());
+    const target = await uniquePath(
+      destination,
+      images.length > 1 ? `${stem} ${index + 1}` : stem,
+      imageExtension(response.headers.get("content-type"), image.url),
+    );
+    await writeFile(target, data, { flag: "wx" });
+    targets.push(target);
+  }
+  return targets;
 }
 
 function cueTexts(input: string): string[] {
@@ -1386,7 +1597,7 @@ export async function downloadMedia(
       if (format === "mp3") args.push("--audio-quality", "0");
     }
     // A photo in a carousel shouldn't stop the videos around it.
-    if (video.items) args.push("--ignore-errors");
+    if (video.items || video.photos) args.push("--ignore-errors");
     args.push(video.url);
     onProgress?.(`Downloading ${format.toUpperCase()}…`);
     let item = "";
