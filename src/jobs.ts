@@ -25,7 +25,7 @@ export type JobSpec =
   | { kind: "file"; path: string; options: TranscriptionOptions }
   | {
       kind: "video";
-      video: { id: string; title: string; url: string };
+      video: VideoRef;
       options: TranscriptionOptions;
     }
   | ({ kind: "playlist" } & PlaylistDownload)
@@ -329,17 +329,13 @@ async function perform(
         ],
       };
     case "video":
-      return {
-        outputs: [
-          await transcribeVideo(
-            spec.video,
-            spec.options,
-            settings,
-            onProgress,
-            signal,
-          ),
-        ],
-      };
+      return await transcribeVideo(
+        spec.video,
+        spec.options,
+        settings,
+        onProgress,
+        signal,
+      );
     case "playlist":
       return await downloadPlaylistSubtitles(
         spec,
@@ -462,7 +458,17 @@ export function queueSummary(jobs: Job[]): string | undefined {
   ];
   for (const [kinds, noun] of groups) {
     const group = jobs.filter((job) => kinds.includes(job.spec.kind));
-    const done = group.filter((job) => job.status === "done").length;
+    // A transcribed post with several videos counts each transcript.
+    const done = group
+      .filter((job) => job.status === "done")
+      .reduce(
+        (total, job) =>
+          total +
+          (noun === "transcription"
+            ? Math.max(job.outputs?.length ?? 1, 1)
+            : 1),
+        0,
+      );
     const failed = group.filter((job) => job.status === "failed").length;
     if (done && failed)
       parts.push(

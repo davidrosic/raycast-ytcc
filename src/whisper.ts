@@ -16,9 +16,10 @@ import { basename, dirname, join, parse } from "node:path";
 import {
   ExportFormat,
   Settings,
-  Video,
+  VideoRef,
   cleanSrt,
   executable,
+  isCanceled,
   localFileInfo,
   outputDirectory,
   rawCaptionText,
@@ -384,72 +385,77 @@ export function transcriptSuffix(language: string, translate?: boolean) {
   return `whisper-${spoken}${translate && language !== "en" ? " to English" : ""}`;
 }
 
+/** Finds whisper.cpp, the model and the VAD model, and checks the model can do what was asked. */
+async function prepare(
+  options: TranscriptionOptions,
+  settings: Settings,
+  onProgress?: (message: string) => void,
+  signal?: AbortSignal,
+): Promise<WhisperSetup> {
+  const setup = await whisperSetup(settings, options.model, onProgress, signal);
+  if (options.translate && !canTranslate(setup.model))
+    throw new Error(
+      `${modelName(setup.model)} can't translate. Choose large-v3 or another model without “turbo” in its name.`,
+    );
+  return setup;
+}
+
 /**
- * Transcribes audio with whisper.cpp and saves one file in the chosen format.
- * `audio` returns the file to read, and may download it into the temporary folder.
+ * Transcribes one recording with whisper.cpp and saves one file in the chosen
+ * format, named after `name` in `directory`.
  */
-async function transcribeAudio(
-  audio: (temporary: string) => Promise<string>,
-  destination: () => Promise<{ directory: string; name: string }>,
+async function transcribeInto(
+  setup: WhisperSetup,
+  input: string,
+  temporary: string,
+  { directory, name }: { directory: string; name: string },
   options: TranscriptionOptions,
   settings: Settings,
   onProgress?: (message: string) => void,
   signal?: AbortSignal,
 ): Promise<string> {
-  const { language, format, model, translate } = options;
-  const setup = await whisperSetup(settings, model, onProgress, signal);
-  const { vad } = setup;
-  if (translate && !canTranslate(setup.model))
+  const { language, format, translate } = options;
+  const wav = await whisperAudio(
+    input,
+    temporary,
+    settings,
+    onProgress,
+    signal,
+  );
+  const source = format === "srt" ? "srt" : "vtt";
+  const result = await runWhisper(
+    setup,
+    wav,
+    options,
+    [source],
+    temporary,
+    onProgress,
+    signal,
+  );
+  const output = await readFile(`${result}.${source}`, "utf8");
+  if (!rawCaptionText(output, source).trim())
     throw new Error(
-      `${modelName(setup.model)} can't translate. Choose large-v3 or another model without “turbo” in its name.`,
+      setup.vad
+        ? "No speech was found. The recording may be only music or silence."
+        : "No speech was found.",
     );
-  const temporary = await mkdtemp(join(tmpdir(), "raycast-whisper-"));
-  try {
-    const wav = await whisperAudio(
-      await audio(temporary),
-      temporary,
-      settings,
-      onProgress,
-      signal,
-    );
-    const source = format === "srt" ? "srt" : "vtt";
-    const result = await runWhisper(
-      setup,
-      wav,
-      options,
-      [source],
-      temporary,
-      onProgress,
-      signal,
-    );
-    const output = await readFile(`${result}.${source}`, "utf8");
-    if (!rawCaptionText(output, source).trim())
-      throw new Error(
-        vad
-          ? "No speech was found. The recording may be only music or silence."
-          : "No speech was found.",
-      );
-    const { directory, name } = await destination();
-    const target = await uniquePath(
-      directory,
-      `${name} - ${transcriptSuffix(language, translate)}${format === "raw" ? " - RAW" : ""}`,
-      format === "raw" ? "txt" : format,
-    );
-    await writeFile(
-      target,
-      format === "raw"
-        ? rawCaptionText(output, "vtt")
-        : format === "txt"
-          ? vttToText(output)
-          : format === "srt"
-            ? cleanSrt(output)
-            : output,
-      { encoding: "utf8", flag: "wx" },
-    );
-    return target;
-  } finally {
-    await rm(temporary, { recursive: true, force: true });
-  }
+  const target = await uniquePath(
+    directory,
+    `${name} - ${transcriptSuffix(language, translate)}${format === "raw" ? " - RAW" : ""}`,
+    format === "raw" ? "txt" : format,
+  );
+  await writeFile(
+    target,
+    format === "raw"
+      ? rawCaptionText(output, "vtt")
+      : format === "txt"
+        ? vttToText(output)
+        : format === "srt"
+          ? cleanSrt(output)
+          : output,
+    { encoding: "utf8", flag: "wx" },
+  );
+  return target;
 }
 
 /**
@@ -465,72 +471,132 @@ export async function transcribeFile(
 ): Promise<string> {
   if (!localFileInfo(path)?.isFile)
     throw new Error(`${path} is not a file that can be read.`);
-  return await transcribeAudio(
-    async () => path,
-    async () => {
-      try {
-        await access(dirname(path), constants.W_OK);
-        return { directory: dirname(path), name: safeName(parse(path).name) };
-      } catch {
-        return {
-          directory: await outputDirectory(settings),
-          name: safeName(parse(path).name),
-        };
-      }
-    },
-    options,
-    settings,
-    onProgress,
-    signal,
-  );
+  const setup = await prepare(options, settings, onProgress, signal);
+  let directory = dirname(path);
+  try {
+    await access(directory, constants.W_OK);
+  } catch {
+    directory = await outputDirectory(settings);
+  }
+  const temporary = await mkdtemp(join(tmpdir(), "raycast-whisper-"));
+  try {
+    return await transcribeInto(
+      setup,
+      path,
+      temporary,
+      { directory, name: safeName(parse(path).name) },
+      options,
+      settings,
+      onProgress,
+      signal,
+    );
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
 }
 
-/** Downloads a video's audio with yt-dlp, transcribes it, and saves the result in the download folder. */
+/**
+ * Downloads a video's audio with yt-dlp, transcribes it, and saves the result
+ * in the download folder. Posts with several videos, such as X posts and
+ * Instagram carousels, get one transcript per video; videos that fail are
+ * skipped when others succeed.
+ */
 export async function transcribeVideo(
-  video: Pick<Video, "id" | "title" | "url">,
+  video: VideoRef,
   options: TranscriptionOptions,
   settings: Settings,
   onProgress?: (message: string) => void,
   signal?: AbortSignal,
-): Promise<string> {
+): Promise<{
+  outputs: string[];
+  skipped: { title: string; reason: string }[];
+}> {
   const directory = await outputDirectory(settings);
-  return await transcribeAudio(
-    async (temporary) => {
-      onProgress?.("Downloading audio…");
+  const setup = await prepare(options, settings, onProgress, signal);
+  const temporary = await mkdtemp(join(tmpdir(), "raycast-whisper-"));
+  const outputs: string[] = [];
+  const skipped: { title: string; reason: string }[] = [];
+  try {
+    onProgress?.("Downloading audio…");
+    let item = "";
+    let failure: unknown;
+    try {
       await runYtDlp(
         settings,
         [
           "--no-playlist",
-          // Posts with several videos transcribe the first one.
-          "--playlist-items",
-          "1",
           "--newline",
+          // A photo in a carousel shouldn't stop the videos around it.
+          ...(video.items ? ["--ignore-errors"] : []),
           "-f",
           "bestaudio/best",
           "-o",
-          join(temporary, "audio.%(ext)s"),
+          join(temporary, "audio-%(playlist_index|0)s.%(ext)s"),
           video.url,
         ],
         (line) => {
+          const next = /^\[download\] Downloading item (\d+) of (\d+)/.exec(
+            line,
+          );
+          if (next) item = `${next[1]} of ${next[2]} · `;
           const match = /\[download\]\s+([\d.]+)%/.exec(line);
           if (match)
-            onProgress?.(`Downloading audio… ${Math.floor(Number(match[1]))}%`);
+            onProgress?.(
+              `${item}Downloading audio… ${Math.floor(Number(match[1]))}%`,
+            );
         },
         signal,
       );
-      const audio = (await readdir(temporary)).find(
-        (name) => name.startsWith("audio.") && !name.endsWith(".part"),
-      );
-      if (!audio) throw new Error("yt-dlp did not produce an audio file.");
-      return join(temporary, audio);
-    },
-    async () => ({
-      directory,
-      name: `${safeName(video.title)} [${video.id}]`,
-    }),
-    options,
-    settings,
-    onProgress,
-    signal,
-  );
+    } catch (error) {
+      if (isCanceled(error)) throw error;
+      failure = error;
+    }
+    const files = (await readdir(temporary))
+      .filter(
+        (name) => name.startsWith("audio-") && !/\.(part|ytdl)$/.test(name),
+      )
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    if (!files.length)
+      throw failure ?? new Error("yt-dlp did not produce an audio file.");
+    const stem = `${safeName(video.title)} [${video.id}]`;
+    for (const [index, file] of files.entries()) {
+      const several = files.length > 1;
+      const work = join(temporary, `work-${index}`);
+      await mkdir(work);
+      try {
+        outputs.push(
+          await transcribeInto(
+            setup,
+            join(temporary, file),
+            work,
+            { directory, name: several ? `${stem} ${index + 1}` : stem },
+            options,
+            settings,
+            (message) =>
+              onProgress?.(
+                several
+                  ? `${index + 1} of ${files.length} · ${message}`
+                  : message,
+              ),
+            signal,
+          ),
+        );
+      } catch (error) {
+        if (isCanceled(error) || !several) throw error;
+        skipped.push({
+          title: `Video ${index + 1}`,
+          reason: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    if (!outputs.length) throw new Error(skipped[0].reason);
+    return { outputs, skipped };
+  } catch (error) {
+    // Canceling keeps the transcripts saved so far, for the queue to show.
+    if (isCanceled(error))
+      Object.assign(error as Error, { partial: { outputs, skipped } });
+    throw error;
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
 }

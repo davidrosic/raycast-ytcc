@@ -174,17 +174,17 @@ export function jobSubtitle(job: Job): string {
       return job.progress || "Starting…";
     case "queued":
       return "Waiting";
-    case "done":
+    case "done": {
+      const saved = job.outputs?.length ?? 0;
+      const skipped = job.skipped?.length
+        ? `, ${job.skipped.length} skipped`
+        : "";
       if (job.spec.kind === "playlist")
-        return [
-          `${job.outputs?.length ?? 0} ${job.outputs?.length === 1 ? "subtitle" : "subtitles"} saved`,
-          job.skipped?.length ? `${job.skipped.length} skipped` : "",
-        ]
-          .filter(Boolean)
-          .join(", ");
-      return job.outputs?.length === 1
-        ? basename(job.outputs[0])
-        : `${job.outputs?.length ?? 0} files saved`;
+        return `${saved} ${saved === 1 ? "subtitle" : "subtitles"} saved${skipped}`;
+      if (saved === 1 && !skipped && job.outputs)
+        return basename(job.outputs[0]);
+      return `${saved} ${saved === 1 ? "file" : "files"} saved${skipped}`;
+    }
     case "failed":
       return job.error || "Failed";
     default:

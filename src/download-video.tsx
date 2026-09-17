@@ -196,10 +196,19 @@ export default function Command() {
 
   function queueVideo(options: TranscriptionOptions) {
     if (!video) return;
-    const { id, title, url } = video;
+    const { id, title, url, items, isLive } = video;
     addToQueue(
       settings,
-      [{ title, spec: { kind: "video", video: { id, title, url }, options } }],
+      [
+        {
+          title,
+          spec: {
+            kind: "video",
+            video: { id, title, url, items, isLive },
+            options,
+          },
+        },
+      ],
       showQueue,
     );
   }
@@ -233,6 +242,11 @@ export default function Command() {
         favoriteLanguages={favoriteLanguages.value}
         defaultLanguage={whisperLanguage}
         defaultFormat={selectedFormat}
+        note={
+          video?.items
+            ? `This post has ${video.items} videos. Each one is transcribed and saved as its own file.`
+            : undefined
+        }
         onTranscribe={(_, options) => {
           pop();
           queueVideo(options);
@@ -831,6 +845,14 @@ export default function Command() {
                   text: whisperLanguageName(whisperLanguage),
                 },
                 { title: "Output", text: formatTitle(selectedFormat) },
+                ...(video.items
+                  ? [
+                      {
+                        title: "Videos",
+                        text: `${video.items}, each transcribed to its own file`,
+                      },
+                    ]
+                  : []),
               ])}
               actions={
                 <ActionPanel>

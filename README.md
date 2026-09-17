@@ -119,7 +119,7 @@ Audio and video downloads work the same way on every site yt-dlp supports: paste
 - **Live streams** can be downloaded after they end.
 - **Sign-in:** Instagram shows many posts only to signed-in accounts, and X sometimes limits downloads without an account. Turn on [Browser Sign-In](#browser-sign-in) with the browser you use those sites in.
 
-Only YouTube has subtitle tracks. For other sites the list offers **Transcribe with Whisper** instead; for posts with several videos, it transcribes the first one.
+Only YouTube has subtitle tracks. For other sites the list offers **Transcribe with Whisper** instead. For posts with several videos, every video is transcribed and saved as its own file: `Title [postId] 1 - whisper-Serbian.txt`, `Title [postId] 2 - whisper-Serbian.txt`.
 
 ## Transcribe audio and video files
 
