@@ -1,7 +1,7 @@
 {
-  "name": "youtube-subtitles-transcription",
-  "title": "YouTube Subtitles & Transcription",
-  "description": "Download YouTube subtitles, audio and video from YouTube, Instagram, X and hundreds of other sites, and transcribe or translate any recording locally with whisper.cpp",
+  "name": "video-downloads-transcription",
+  "title": "Video Downloads & Transcription",
+  "description": "Download audio and video from YouTube, Instagram, X and hundreds of other sites, save YouTube subtitles in any language, and transcribe or translate any recording locally with whisper.cpp",
   "icon": "icon.png",
   "author": "davidrosic",
   "license": "MIT",

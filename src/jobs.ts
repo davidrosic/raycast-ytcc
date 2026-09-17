@@ -475,5 +475,5 @@ export async function runQueueWorker(folder: string) {
   const summary = queueSummary(finished);
   const settings = finished.find((job) => job.settings)?.settings;
   if (summary && settings?.notifyWhenDone !== false)
-    notify("YouTube Subtitles & Transcription", summary);
+    notify("Video Downloads & Transcription", summary);
 }
