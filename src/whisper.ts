@@ -398,6 +398,7 @@ async function transcribeAudio(
 ): Promise<string> {
   const { language, format, model, translate } = options;
   const setup = await whisperSetup(settings, model, onProgress, signal);
+  const { vad } = setup;
   if (translate && !canTranslate(setup.model))
     throw new Error(
       `${modelName(setup.model)} can't translate. Choose large-v3 or another model without “turbo” in its name.`,
@@ -422,6 +423,12 @@ async function transcribeAudio(
       signal,
     );
     const output = await readFile(`${result}.${source}`, "utf8");
+    if (!rawCaptionText(output, source).trim())
+      throw new Error(
+        vad
+          ? "No speech was found. The recording may be only music or silence."
+          : "No speech was found.",
+      );
     const { directory, name } = await destination();
     const target = await uniquePath(
       directory,
