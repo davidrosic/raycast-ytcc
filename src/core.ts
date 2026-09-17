@@ -899,7 +899,56 @@ export function explainYtDlpError(error: unknown, settings: Settings): unknown {
     return new Error(
       `YouTube asked to confirm you're not a bot.${signIn} Updating yt-dlp can also help.`,
     );
+  if (/Unsupported URL/i.test(message))
+    return new Error(
+      "There's no video yt-dlp can download at this link. Check that it opens a video, or see yt-dlp's supported sites.",
+    );
+  const site = siteName(message);
+  const signInTo = browser
+    ? ` Make sure you're signed in to ${site} in ${browser.title}.`
+    : ` To use your ${site} account, choose your browser under Browser Sign-In in extension preferences.`;
+  if (
+    /no video (could be found|in this (post|tweet))|No video formats found|is not a video/i.test(
+      message,
+    )
+  )
+    return new Error("This post has no video.");
+  if (/Bad guest token|guest token|rate.?limit/i.test(message))
+    return new Error(
+      `${site} is limiting downloads without an account. Try again in a moment.${browser ? "" : signInTo}`,
+    );
+  if (
+    /--cookies|logged.in|log ?in|login required|requires authentication|not authorized|empty media response/i.test(
+      message,
+    )
+  )
+    return new Error(
+      `${site} only shows this to signed-in accounts.${signInTo}`,
+    );
   return error;
+}
+
+/** The site named in a yt-dlp error such as `ERROR: [Instagram] abc: …`. */
+function siteName(message: string): string {
+  const extractor = /\[([\w]+)(?::[\w:]+)?\]/.exec(message)?.[1] ?? "";
+  const names: Record<string, string> = {
+    twitter: "X",
+    instagram: "Instagram",
+    tiktok: "TikTok",
+    facebook: "Facebook",
+    vimeo: "Vimeo",
+    reddit: "Reddit",
+    twitch: "Twitch",
+    bilibili: "Bilibili",
+    threads: "Threads",
+    youtube: "YouTube",
+  };
+  return (
+    names[extractor.toLowerCase().replace(/(vod|clips?|post)$/, "")] ??
+    (extractor && extractor.toLowerCase() !== "generic"
+      ? extractor
+      : "This site")
+  );
 }
 
 /** Runs yt-dlp with the shared options, explaining sign-in and cookie errors. */

@@ -613,6 +613,44 @@ test("recognizes links from other video sites", () => {
   );
 });
 
+test("explains errors from other sites", () => {
+  const explain = (message, settings = {}) =>
+    core.explainYtDlpError(
+      new Error(`yt-dlp failed (1): ERROR: ${message}`),
+      settings,
+    ).message;
+  assert.match(
+    explain(
+      "[Instagram] abc: Instagram sent an empty media response. Check if this post is accessible in your browser without being logged-in. If it is not, then use --cookies-from-browser or --cookies",
+    ),
+    /^Instagram only shows this to signed-in accounts\. To use your Instagram account, choose your browser/,
+  );
+  assert.match(
+    explain("[twitter] 1: NSFW tweet requires authentication. Use --cookies", {
+      browserCookies: "safari",
+    }),
+    /^X only shows this to signed-in accounts\. Make sure you're signed in to X in Safari\./,
+  );
+  assert.match(
+    explain("[twitter] 1: Error(s) while querying API: Bad guest token"),
+    /^X is limiting downloads/,
+  );
+  assert.equal(
+    explain("[twitter] 1: No video could be found in this tweet"),
+    "This post has no video.",
+  );
+  assert.match(
+    explain("Unsupported URL: https://example.com/"),
+    /^There's no video yt-dlp can download/,
+  );
+  assert.match(
+    explain(
+      "[vimeo] 1: The web client only works when logged-in. Use --cookies",
+    ),
+    /^Vimeo only shows this/,
+  );
+});
+
 test("counts the videos in a multi-video post", () => {
   const post = core.parseVideo(
     {
