@@ -47,7 +47,7 @@
     {
       "name": "downloadDirectory",
       "title": "Download Folder",
-      "description": "Where subtitles, audio and video are saved",
+      "description": "Where subtitles, audio, video and YouTube transcriptions are saved",
       "type": "directory",
       "required": false
     },
@@ -61,7 +61,7 @@
     {
       "name": "ffmpegPath",
       "title": "ffmpeg Executable",
-      "description": "Needed for audio conversion, MP4 merging, and Whisper transcription",
+      "description": "Needed for MP3, M4A and MP4, subtitle conversion, and transcription",
       "type": "file",
       "required": false
     },
@@ -145,7 +145,7 @@
       "name": "notifyWhenDone",
       "title": "Notifications",
       "label": "Notify when the queue finishes",
-      "description": "Show a macOS notification when all queued transcriptions are done",
+      "description": "Show a macOS notification when everything in the queue is done",
       "type": "checkbox",
       "default": true,
       "required": false
@@ -153,7 +153,7 @@
     {
       "name": "whisperLanguage",
       "title": "Transcription Language",
-      "description": "Spoken language, for example Serbian or auto",
+      "description": "Spoken language to preselect when no favorite language matches, for example Serbian or auto",
       "type": "textfield",
       "default": "Serbian",
       "required": false

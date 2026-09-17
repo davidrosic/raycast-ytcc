@@ -114,7 +114,7 @@ async function vadModel(
   } catch (error) {
     if (signal?.aborted) throw error;
     throw new Error(
-      `Could not download the Silero VAD model (${error instanceof Error ? error.message : String(error)}). Check your connection, or turn off Skip Silence in extension preferences.`,
+      `Could not download the Silero VAD model (${error instanceof Error ? error.message : String(error)}). Check your connection, or turn off Voice Activity Detection in extension preferences.`,
     );
   }
   if (createHash("sha256").update(data).digest("hex") !== sileroModel.sha256)
@@ -355,7 +355,7 @@ async function runWhisper(
       )
     )
       throw new Error(
-        "whisper.cpp couldn't run Silero VAD. Update whisper.cpp, or turn off Skip Silence in extension preferences.",
+        "whisper.cpp couldn't run Silero VAD. Update whisper.cpp, or turn off Voice Activity Detection in extension preferences.",
       );
     throw error;
   }
