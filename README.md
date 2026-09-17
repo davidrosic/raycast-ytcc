@@ -14,19 +14,25 @@ Save YouTube subtitles in any available language as RAW text, clean text, SRT or
 - **No invented text in silence.** Silero voice activity detection skips silence and music, which stops whisper from repeating made-up lines.
 - **Local transcription.** Audio is never uploaded to a transcription service.
 
-## Requirements
+## Setup
 
-| Tool                                                           | Needed for                                        | Install                                       |
-| -------------------------------------------------------------- | ------------------------------------------------- | --------------------------------------------- |
-| [yt-dlp](https://github.com/yt-dlp/yt-dlp)                     | All downloads                                     | `brew install yt-dlp`                         |
-| [ffmpeg](https://ffmpeg.org)                                   | MP3, M4A, MP4, subtitle conversion, transcription | `brew install ffmpeg`                         |
-| [whisper.cpp](https://github.com/ggml-org/whisper.cpp) + model | Transcription only                                | [Set up transcription](#set-up-transcription) |
+Open **Manage Tools and Models**. It shows which tools are installed and installs missing ones with [Homebrew](https://brew.sh).
+
+| Tool                                                   | Needed for                                          |
+| ------------------------------------------------------ | --------------------------------------------------- |
+| [yt-dlp](https://github.com/yt-dlp/yt-dlp)             | All downloads                                       |
+| [ffmpeg](https://ffmpeg.org)                           | MP3, M4A, MP4, subtitle conversion, transcription   |
+| [whisper.cpp](https://github.com/ggml-org/whisper.cpp) | Transcription only, with a [model](#whisper-models) |
+
+Select a missing tool and press ↵ to install it, or press ⌘K and choose **Install All Missing Tools**. Installs run in the [queue](#the-queue), so you can close Raycast while Homebrew works. Without Homebrew, the list links to its website and copies its install command for Terminal.
+
+You can also install everything in Terminal:
 
 ```sh
-brew install yt-dlp ffmpeg
+brew install yt-dlp ffmpeg whisper.cpp
 ```
 
-The extension finds these tools in your `PATH`, `/opt/homebrew/bin`, or `/usr/local/bin`. If yours are elsewhere, set their paths in the extension preferences.
+The extension finds tools in your `PATH`, `/opt/homebrew/bin`, `/usr/local/bin`, and a whisper.cpp checkout at `~/GitHub/whisper.cpp`. If yours are elsewhere, set their paths in the extension preferences.
 
 ## Commands
 
@@ -34,6 +40,7 @@ The extension finds these tools in your `PATH`, `/opt/homebrew/bin`, or `/usr/lo
 | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
 | **Download Video**            | Subtitles, audio and video for a YouTube video, playlist or channel, audio and video from other sites, or a pasted file path |
 | **Transcribe Selected Files** | Transcribes the files or folders selected in Finder                                                                          |
+| **Manage Tools and Models**   | Installs yt-dlp, ffmpeg and whisper.cpp, and downloads whisper models                                                        |
 | **Queue**                     | Running, queued and finished downloads and transcriptions, with Cancel and results                                           |
 | **Queue in Menu Bar**         | Shows progress in the menu bar while the queue is running                                                                    |
 
@@ -156,7 +163,7 @@ If you type a path instead of pasting it, the file appears as a row. Press ↵ t
 
 - **Spoken Language:** your favorite languages come first, with the best match selected. All languages supported by whisper.cpp are listed below them, along with **Detect Automatically**. Type to search the list.
 - **Output:** **RAW · TXT (all cues)**, **Clean TXT**, **SRT** or **VTT**. RAW is selected by default.
-- **Model:** the whisper models found next to your default model. `large-v3-turbo` is fast and accurate; `large-v3` is the most accurate and slowest; quantized models such as `large-v3-turbo-q5_0` are smaller and faster, and slightly less accurate. See [More models](#more-models).
+- **Model:** the whisper models found next to your default model. `large-v3-turbo` is fast and accurate; `large-v3` is the most accurate and slowest; quantized models such as `large-v3-turbo-q5_0` are smaller and faster, and slightly less accurate. See [Whisper models](#whisper-models).
 - **Translate to English:** whisper writes an English translation instead of the spoken language. Turbo models were not trained to translate and answer in the spoken language, so choose `large-v3` or `medium` for translation.
 
 Press ⌘↵ to add the files to the queue. The extension converts the audio with ffmpeg to the 16 kHz mono WAV whisper.cpp needs, reading only the first audio track, and transcribes it. WAV files that are already 16 kHz mono 16-bit are not converted at all.
@@ -184,47 +191,39 @@ Whisper tends to invent text when it hears silence or music. A common result is 
 
 The first transcription downloads `ggml-silero-v6.2.0.bin` (885 KB) from the [whisper.cpp VAD models](https://huggingface.co/ggml-org/whisper-vad) and checks its checksum. To use your own copy, put it next to your whisper model or select it under **Silero VAD Model**. VAD needs a recent whisper.cpp.
 
-## Set up transcription
+## Whisper models
 
-The `large-v3-turbo` model is about 1.6 GB and is not included with the extension.
+Transcription needs whisper.cpp and at least one model. Models aren't included with the extension because they're large.
 
-**Option 1: Homebrew**
+In **Manage Tools and Models**, select a model under **Whisper Models** and press ↵ to download it from [Hugging Face](https://huggingface.co/ggerganov/whisper.cpp). The download runs in the queue with progress in the menu bar, and is checked against its published checksum. If your Mac goes offline or restarts, **Try Again** continues where it stopped.
 
-```sh
-brew install whisper.cpp
-mkdir -p ~/whisper-models
-curl -L -o ~/whisper-models/ggml-large-v3-turbo.bin \
-  https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin
-```
+| Model                                        | Size           | Notes                                                |
+| -------------------------------------------- | -------------- | ---------------------------------------------------- |
+| `large-v3-turbo`                             | 1.6 GB         | Recommended: fast and nearly as accurate as large-v3 |
+| `large-v3-turbo-q8_0`, `large-v3-turbo-q5_0` | 874 MB, 574 MB | Smaller turbo models                                 |
+| `large-v3`                                   | 3.1 GB         | Most accurate and slowest; can translate             |
+| `large-v3-q5_0`                              | 1.1 GB         | Smaller large-v3; can translate                      |
+| `medium`, `medium-q5_0`                      | 1.5 GB, 539 MB | Faster and less accurate; can translate              |
+| `small`, `base`                              | 488 MB, 148 MB | Fastest, for clear speech                            |
 
-In the extension preferences, set **Default Whisper Model** to `ggml-large-v3-turbo.bin` in your `whisper-models` folder. `whisper-cli` is found automatically.
+- **The default model** is selected in the transcription form and used when you transcribe right away with ⌘↵. It is `large-v3-turbo` when you have it; choose another with **Set as Default Model**. The **Default Whisper Model** preference overrides it.
+- **The Model dropdown** lists the models downloaded here, the models in `~/GitHub/whisper.cpp/models`, and the models next to the **Default Whisper Model** preference.
+- **Models downloaded here** are saved in the extension's support folder. **Move Model to Trash** removes one; models you added yourself are never removed.
 
-**Option 2: build from source**
+To build whisper.cpp from source instead of installing it with Homebrew:
 
 ```sh
 git clone https://github.com/ggml-org/whisper.cpp.git ~/GitHub/whisper.cpp
 cd ~/GitHub/whisper.cpp
 cmake -B build
 cmake --build build --config Release
-sh ./models/download-ggml-model.sh large-v3-turbo
 ```
 
-A checkout at `~/GitHub/whisper.cpp` and its `models/ggml-large-v3-turbo.bin` are found automatically. For a checkout elsewhere, set **whisper.cpp CLI** to its `build/bin/whisper-cli`.
+A checkout at `~/GitHub/whisper.cpp` is found automatically, along with the models in its `models` folder. For a checkout elsewhere, set **whisper.cpp CLI** to its `build/bin/whisper-cli`.
 
-### More models
+### Core ML
 
-Every `ggml-*.bin` model in the same folder as your default model appears in the **Model** dropdown. To add one:
-
-```sh
-# in a whisper.cpp checkout
-sh ./models/download-ggml-model.sh large-v3
-sh ./models/download-ggml-model.sh large-v3-turbo-q5_0
-
-# or with curl, into your models folder
-curl -L -O https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3.bin
-```
-
-If you built whisper.cpp with Core ML (`-DWHISPER_COREML=1`), each model also needs its Core ML encoder, such as `ggml-large-v3-encoder.mlmodelc`, next to it. Models without one are marked **needs Core ML encoder**. Create it with `./models/generate-coreml-model.sh large-v3`, or use a build without Core ML. Quantized models use the encoder of their base model.
+If you built whisper.cpp with Core ML (`-DWHISPER_COREML=1`), each model also needs its Core ML encoder, such as `ggml-large-v3-encoder.mlmodelc`, next to it. Models without one are marked **Needs Core ML encoder**. Create it with `./models/generate-coreml-model.sh large-v3`, or use a build without Core ML. Quantized models use the encoder of their base model.
 
 ## Preferences
 
@@ -233,10 +232,10 @@ If you built whisper.cpp with Core ML (`-DWHISPER_COREML=1`), each model also ne
 | **Download Folder**            | `~/Downloads`       | Where subtitles, audio, video and YouTube transcriptions are saved. File transcriptions are saved next to the file. |
 | **yt-dlp Executable**          | Found automatically | Path to `yt-dlp`                                                                                                    |
 | **ffmpeg Executable**          | Found automatically | Path to `ffmpeg`                                                                                                    |
-| **Browser Tab**                | On                  | Load the video open in the frontmost browser tab when the clipboard has no video link                               |
 | **Browser Sign-In**            | Off                 | The browser whose sign-in yt-dlp uses, for restricted YouTube videos and posts that need an account on other sites  |
+| **Browser Tab**                | On                  | Load the video open in the frontmost browser tab when the clipboard has no video link                               |
 | **whisper.cpp CLI**            | Found automatically | Path to `whisper-cli`                                                                                               |
-| **Default Whisper Model**      | Next to whisper.cpp | The model selected in the form. Other models in its folder can be chosen when transcribing.                         |
+| **Default Whisper Model**      | Chosen in the list  | Overrides the default model chosen in Manage Tools and Models. Other models in its folder can be chosen too.        |
 | **Voice Activity Detection**   | On                  | Transcribe only the parts with speech, using Silero VAD                                                             |
 | **Silero VAD Model**           | Downloaded          | Path to a Silero VAD model for whisper.cpp                                                                          |
 | **Notifications**              | On                  | Show a notification when everything in the queue is done                                                            |
@@ -253,7 +252,9 @@ Some videos only play when you're signed in: age-restricted, private and members
 
 ## Troubleshooting
 
-**"yt-dlp was not found" or "ffmpeg was not found".** Install them with `brew install yt-dlp ffmpeg`, or set their paths in the preferences.
+**"yt-dlp was not found" or "ffmpeg was not found".** Install them in **Manage Tools and Models**, or set their paths in the preferences.
+
+**"No whisper model is installed".** Download one in **Manage Tools and Models**. See [Whisper models](#whisper-models).
 
 **A video won't load or download.** YouTube changes often, and old yt-dlp versions stop working. When a newer yt-dlp is available, **Download Video** says so and offers **Update yt-dlp**. It runs `brew upgrade yt-dlp`, `pipx upgrade yt-dlp`, `pip install --upgrade yt-dlp` or `yt-dlp -U`, depending on how yt-dlp was installed. The newest version is checked on GitHub at most twice a day.
 
@@ -267,7 +268,7 @@ Some videos only play when you're signed in: age-restricted, private and members
 
 **The transcript repeats one line, or has text where nobody speaks.** Make sure **Voice Activity Detection** is on.
 
-**"needs Core ML encoder" or "failed to load Core ML model".** See [More models](#more-models).
+**"needs Core ML encoder" or "failed to load Core ML model".** See [Core ML](#core-ml).
 
 **"large-v3-turbo can't translate".** Choose `large-v3`, `medium` or another model without "turbo" in its name.
 
@@ -287,7 +288,8 @@ Everything runs on your Mac. The extension talks only to:
 
 With **Browser Tab** on, the extension reads the address of your browser's current tab when you open **Download Video** from the browser. It isn't stored or sent anywhere.
 
-- Hugging Face, once, to download the Silero VAD model.
+- Hugging Face, to download the Silero VAD model once, and the whisper models you choose.
+- Homebrew, when you install tools with it.
 
 Audio, video and transcripts never leave your computer. With Browser Sign-In on, yt-dlp reads your browser's cookies locally to talk to YouTube; they are not sent anywhere else.
 

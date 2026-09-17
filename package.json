@@ -35,6 +35,13 @@
       "mode": "view"
     },
     {
+      "name": "manage-tools-and-models",
+      "title": "Manage Tools and Models",
+      "subtitle": "yt-dlp, ffmpeg, whisper.cpp",
+      "description": "Install yt-dlp, ffmpeg and whisper.cpp with Homebrew, download whisper models, and choose the default model",
+      "mode": "view"
+    },
+    {
       "name": "queue-menu-bar",
       "title": "Queue in Menu Bar",
       "subtitle": "Progress while jobs run",
@@ -130,7 +137,7 @@
     {
       "name": "modelPath",
       "title": "Default Whisper Model",
-      "description": "Path to a ggml model, such as ggml-large-v3-turbo.bin; found next to whisper.cpp when not set. Other models in the same folder can be chosen when transcribing.",
+      "description": "Optional; a ggml model such as ggml-large-v3-turbo.bin. When not set, the default chosen in Manage Tools and Models is used. Other models in the same folder can be chosen when transcribing.",
       "type": "file",
       "required": false
     },

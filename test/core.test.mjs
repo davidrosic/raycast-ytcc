@@ -11,7 +11,7 @@ const compiled = join(temporary, "core.cjs");
 require("esbuild").buildSync({
   stdin: {
     contents:
-      'export * from "./src/core"; export * from "./src/whisper"; export * from "./src/updates"; export * from "./src/playlists"; export { queueSummary } from "./src/jobs";',
+      'export * from "./src/core"; export * from "./src/whisper"; export * from "./src/updates"; export * from "./src/playlists"; export { queueSummary } from "./src/jobs"; export * from "./src/models"; export * from "./src/setup";',
     resolveDir: process.cwd(),
     loader: "ts",
   },
@@ -824,4 +824,42 @@ test("finds photos in Instagram and X posts", () => {
   assert.equal(post.channel, "@TheEllenShow");
   assert.equal(post.uploadDate, "2014-03-03");
   assert.equal(core.parseXPost({ text: "no id" }, "u"), undefined);
+});
+
+test("describes tools, Homebrew output and model downloads", () => {
+  assert.equal(
+    core.cellarVersion(
+      "/opt/homebrew/Cellar/whisper.cpp/1.9.4_1/bin/whisper-cli",
+    ),
+    "1.9.4",
+  );
+  assert.equal(
+    core.cellarVersion("/Users/me/whisper.cpp/build/bin/x"),
+    undefined,
+  );
+  assert.equal(
+    core.brewProgress("==> Pouring ffmpeg--9.0.1.arm64_tahoe.bottle.tar.gz"),
+    "Installing ffmpeg…",
+  );
+  assert.equal(
+    core.brewProgress("==> Fetching downloads for: whisper.cpp"),
+    "Downloading whisper.cpp…",
+  );
+  assert.equal(core.brewProgress("==> Caveats"), undefined);
+  assert.equal(core.brewProgress("🍺  /opt/homebrew/Cellar/ffmpeg"), undefined);
+  assert.equal(
+    core.brewError(
+      "brew failed (1): ==> Auto-updating Homebrew...\nWarning: No available formula\nError: No formulae or casks found for x.\n",
+    ),
+    "No formulae or casks found for x.",
+  );
+  assert.equal(
+    core.coreMlEncoder("/m/ggml-medium-q5_0.bin"),
+    "/m/ggml-medium-encoder.mlmodelc",
+  );
+  assert.ok(
+    core.modelCatalog.every(
+      (model) => /^[0-9a-f]{64}$/.test(model.sha256) && model.size > 1e7,
+    ),
+  );
 });

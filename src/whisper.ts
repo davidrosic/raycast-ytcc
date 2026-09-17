@@ -10,7 +10,14 @@ import {
   rm,
   writeFile,
 } from "node:fs/promises";
-import { constants, existsSync, realpathSync } from "node:fs";
+import {
+  constants,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, parse } from "node:path";
 import {
@@ -30,6 +37,7 @@ import {
   vttToText,
   whisperLanguageName,
 } from "./core";
+import { modelCatalog, modelsFolder } from "./models";
 
 /** Whether a WAV header already describes the 16 kHz mono 16-bit PCM audio whisper.cpp reads. */
 export function isWhisperWavHeader(header: Buffer): boolean {
@@ -149,11 +157,30 @@ function checkoutModels(whisper: string): string {
   return join(dirname(dirname(dirname(whisper))), "models");
 }
 
-function defaultModelPath(settings: Settings, whisper: string): string {
-  return (
-    settings.modelPath ||
-    join(checkoutModels(whisper), "ggml-large-v3-turbo.bin")
-  );
+function defaultModelFile(settings: Settings): string | undefined {
+  return settings.supportPath
+    ? join(settings.supportPath, "default-model.txt")
+    : undefined;
+}
+
+/** The model chosen with Set as Default Model, if it still exists. */
+function savedDefaultModel(settings: Settings): string | undefined {
+  const file = defaultModelFile(settings);
+  try {
+    const path = file && readFileSync(file, "utf8").trim();
+    return path && existsSync(path) ? path : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Makes a model the default, unless the Default Whisper Model preference is set. */
+export function saveDefaultModel(settings: Settings, path: string) {
+  const file = defaultModelFile(settings);
+  if (!file)
+    throw new Error("The extension's support folder is not available.");
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, path);
 }
 
 /** The Core ML encoder whisper.cpp loads for a model; quantized models share their base model's encoder. */
@@ -162,7 +189,7 @@ export function coreMlEncoder(model: string): string {
 }
 
 /** Whether whisper-cli was built with Core ML, which needs an encoder next to every model. */
-function usesCoreMl(whisper: string): boolean {
+export function usesCoreMl(whisper: string): boolean {
   try {
     const bin = dirname(realpathSync(whisper));
     return [join(bin, "..", "src"), join(bin, "..", "lib"), bin].some(
@@ -173,29 +200,41 @@ function usesCoreMl(whisper: string): boolean {
   }
 }
 
+/** How suitable a model is as the default: the catalog's order, with large-v3-turbo first. */
+function defaultRank(name: string): number {
+  const index = modelCatalog.findIndex((model) => model.name === name);
+  return index < 0 ? modelCatalog.length : index;
+}
+
 /**
- * Whisper models next to the default model, in the whisper.cpp checkout, and in
- * the extension's support folder. The default model comes first, then larger
- * (more accurate) models before smaller ones.
+ * Installed whisper models: the Default Whisper Model preference and the
+ * models next to it, the whisper.cpp checkout's models, and models downloaded
+ * in Manage Tools and Models. The default model is the preference, then the
+ * one chosen with Set as Default Model, then the best installed model. It
+ * comes first, then larger (more accurate) models before smaller ones.
  */
-export async function whisperModels(
-  settings: Settings,
-): Promise<{ models: WhisperModel[]; defaultModel?: string }> {
+export async function whisperModels(settings: Settings): Promise<{
+  models: WhisperModel[];
+  defaultModel?: string;
+  coreMl: boolean;
+}> {
   let whisper: string | undefined;
   try {
     whisper = await executable(settings.whisperPath, "whisper-cli");
   } catch {
-    return { models: [] };
+    whisper = undefined;
   }
-  const defaultModel = defaultModelPath(settings, whisper);
-  const coreMl = usesCoreMl(whisper);
+  const coreMl = whisper ? usesCoreMl(whisper) : false;
+  const saved = savedDefaultModel(settings);
   const folders = [
-    dirname(defaultModel),
-    checkoutModels(whisper),
-    ...(settings.supportPath ? [join(settings.supportPath, "models")] : []),
+    ...(settings.modelPath ? [dirname(settings.modelPath)] : []),
+    ...(saved ? [dirname(saved)] : []),
+    ...(whisper ? [checkoutModels(whisper)] : []),
+    ...(settings.supportPath ? [modelsFolder(settings.supportPath)] : []),
   ];
   const paths = new Set<string>();
-  if (localFileInfo(defaultModel)?.isFile) paths.add(defaultModel);
+  if (settings.modelPath && localFileInfo(settings.modelPath)?.isFile)
+    paths.add(settings.modelPath);
   for (const folder of new Set(folders)) {
     try {
       for (const file of await readdir(folder))
@@ -210,23 +249,28 @@ export async function whisperModels(
     const info = localFileInfo(path);
     if (!info?.isFile) continue;
     const encoder = coreMlEncoder(path);
+    const missing = coreMl && !existsSync(encoder);
     models.push({
       path,
       name: modelName(path),
       size: info.size,
-      missingEncoder:
-        coreMl && !existsSync(encoder) ? basename(encoder) : undefined,
+      missingEncoder: missing ? basename(encoder) : undefined,
     });
   }
+  const defaultModel =
+    (settings.modelPath && paths.has(settings.modelPath)
+      ? settings.modelPath
+      : undefined) ??
+    (saved && paths.has(saved) ? saved : undefined) ??
+    [...models].sort(
+      (a, b) => defaultRank(a.name) - defaultRank(b.name) || b.size - a.size,
+    )[0]?.path;
   models.sort(
     (a, b) =>
       Number(b.path === defaultModel) - Number(a.path === defaultModel) ||
       b.size - a.size,
   );
-  return {
-    models,
-    defaultModel: paths.has(defaultModel) ? defaultModel : models[0]?.path,
-  };
+  return { models, defaultModel, coreMl };
 }
 
 async function whisperSetup(
@@ -236,12 +280,14 @@ async function whisperSetup(
   signal?: AbortSignal,
 ): Promise<WhisperSetup> {
   const whisper = await executable(settings.whisperPath, "whisper-cli");
-  const model = chosenModel || defaultModelPath(settings, whisper);
+  const model = chosenModel || (await whisperModels(settings)).defaultModel;
+  if (!model)
+    throw new Error(
+      "No whisper model is installed. Download one in Manage Tools and Models.",
+    );
   if (!(await readable(model)))
     throw new Error(
-      chosenModel || settings.modelPath
-        ? `${basename(model)} was not found. Choose another model, or select one in extension preferences.`
-        : "No whisper model was found. Select ggml-large-v3-turbo.bin in extension preferences.",
+      `${basename(model)} was not found. Choose another model, or download one in Manage Tools and Models.`,
     );
   return {
     whisper,

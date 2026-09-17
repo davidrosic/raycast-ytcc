@@ -4,9 +4,9 @@ import {
   Form,
   Icon,
   Toast,
-  openExtensionPreferences,
   showToast,
 } from "@raycast/api";
+import { errorAction } from "./open-setup";
 import { useEffect, useState } from "react";
 import { ExportFormat, Settings } from "./core";
 import { CaptionChoice, Playlist, inspectPlaylist } from "./playlists";
@@ -36,12 +36,7 @@ export function usePlaylist(url: string | undefined, settings: Settings) {
           style: Toast.Style.Failure,
           title: "Could not load playlist",
           message: errorMessage(reason),
-          primaryAction: /Browser Sign-In/.test(errorMessage(reason))
-            ? {
-                title: "Open Extension Preferences",
-                onAction: openExtensionPreferences,
-              }
-            : undefined,
+          primaryAction: errorAction(errorMessage(reason)),
         });
       },
     );

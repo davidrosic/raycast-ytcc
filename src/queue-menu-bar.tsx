@@ -15,7 +15,13 @@ import {
   startWorker,
   workerProcess,
 } from "./jobs";
-import { copyText, jobIcon, jobSubtitle, savesTranscripts } from "./queue";
+import {
+  copyText,
+  jobIcon,
+  jobSubtitle,
+  opensResult,
+  savesTranscripts,
+} from "./queue";
 
 export { runQueueWorker } from "./jobs";
 
@@ -113,11 +119,13 @@ export default function Command() {
                     onAction={() => copyText(outputs)}
                   />
                 )}
-                <MenuBarExtra.Item
-                  icon={Icon.ArrowNe}
-                  title={job.folder ? "Open Folder" : "Open"}
-                  onAction={() => open(output)}
-                />
+                {opensResult(job) && (
+                  <MenuBarExtra.Item
+                    icon={Icon.ArrowNe}
+                    title={job.folder ? "Open Folder" : "Open"}
+                    onAction={() => open(output)}
+                  />
+                )}
                 <MenuBarExtra.Item
                   icon={Icon.Finder}
                   title="Show in Finder"

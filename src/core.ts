@@ -943,7 +943,7 @@ export async function executable(
     }
   }
   throw new Error(
-    `${name} was not found. Install it or set its path in extension preferences.`,
+    `${name} was not found. Install it in Manage Tools and Models, or set its path in extension preferences.`,
   );
 }
 

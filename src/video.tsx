@@ -5,9 +5,9 @@ import {
   Toast,
   environment,
   getFrontmostApplication,
-  openExtensionPreferences,
   showToast,
 } from "@raycast/api";
+import { errorAction } from "./open-setup";
 import { useEffect, useRef, useState } from "react";
 import {
   MediaFormat,
@@ -81,12 +81,7 @@ export function useVideo(
           style: Toast.Style.Failure,
           title: "Could not inspect video",
           message: errorMessage(reason),
-          primaryAction: /Browser Sign-In/.test(errorMessage(reason))
-            ? {
-                title: "Open Extension Preferences",
-                onAction: openExtensionPreferences,
-              }
-            : undefined,
+          primaryAction: errorAction(errorMessage(reason)),
         });
       },
     );

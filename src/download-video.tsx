@@ -70,6 +70,7 @@ import {
   videoDetail,
 } from "./video";
 import { TranscriptionOptions, modelName } from "./whisper";
+import { SetupList, useMissingTools } from "./setup-list";
 import { useYtDlpUpdate } from "./ytdlp-update";
 
 export { runQueueWorker } from "./jobs";
@@ -122,6 +123,7 @@ export default function Command() {
   });
   const [selectedFormat, setSelectedFormat] = useState<ExportFormat>("raw");
   const ytDlp = useYtDlpUpdate(settings);
+  const missingTools = useMissingTools(settings, ["yt-dlp", "ffmpeg"]);
   const downloads = useRef(new Set<AbortController>());
 
   /**
@@ -487,6 +489,12 @@ export default function Command() {
         target={<QueueList settings={settings} />}
       />
       <Action.Push
+        title="Manage Tools and Models"
+        icon={Icon.Download}
+        shortcut={{ modifiers: ["cmd", "shift"], key: "m" }}
+        target={<SetupList settings={settings} />}
+      />
+      <Action.Push
         title="Edit Favorite Languages"
         icon={Icon.Star}
         target={
@@ -601,12 +609,21 @@ export default function Command() {
         description={
           url
             ? "Clear the search to see everything, or paste another link."
-            : updateNote
-              ? `${updateNote} Press ↵ to update it.`
-              : "YouTube, Instagram, X, TikTok and other video links load as soon as you paste them, or when a link is in your clipboard as the command opens. For other sites, paste the link and press Return. To transcribe an audio or video file, paste its full path."
+            : missingTools.length
+              ? `${missingTools.map((tool) => tool.name).join(" and ")} ${missingTools.length > 1 ? "aren't" : "isn't"} installed yet. Press ↵ to install ${missingTools.length > 1 ? "them" : "it"}.`
+              : updateNote
+                ? `${updateNote} Press ↵ to update it.`
+                : "YouTube, Instagram, X, TikTok and other video links load as soon as you paste them, or when a link is in your clipboard as the command opens. For other sites, paste the link and press Return. To transcribe an audio or video file, paste its full path."
         }
         actions={
           <ActionPanel>
+            {!url && missingTools.length > 0 && (
+              <Action.Push
+                title="Install Missing Tools"
+                icon={Icon.Download}
+                target={<SetupList settings={settings} />}
+              />
+            )}
             {!url && updateAction}
             {moreActions}
           </ActionPanel>

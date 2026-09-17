@@ -18,6 +18,7 @@ import { readFileSync } from "node:fs";
 import { basename } from "node:path";
 import { useEffect, useRef, useState } from "react";
 import { Settings, formatDuration } from "./core";
+import { errorAction } from "./open-setup";
 import {
   Job,
   JobSpec,
@@ -54,6 +55,10 @@ export function jobNoun(spec: JobSpec): string {
       return `${spec.format.toUpperCase()} download`;
     case "images":
       return "photo download";
+    case "model":
+      return "model download";
+    case "install":
+      return "installation";
   }
 }
 
@@ -187,6 +192,7 @@ export function jobSubtitle(job: Job): string {
         return `${saved} ${saved === 1 ? "subtitle" : "subtitles"} saved${skipped}`;
       if (job.spec.kind === "playlist-media")
         return `${saved} ${job.spec.format.toUpperCase()} ${saved === 1 ? "file" : "files"} saved${skipped}`;
+      if (job.spec.kind === "install") return "Installed";
       if (saved === 1 && !skipped && job.outputs)
         return basename(job.outputs[0]);
       return `${saved} ${saved === 1 ? "file" : "files"} saved${skipped}`;
@@ -213,6 +219,10 @@ function doneTitle(job: Job): string {
     }
     case "images":
       return count > 1 ? `${count} photos saved` : "Photo saved";
+    case "model":
+      return `${job.title} downloaded`;
+    case "install":
+      return `${job.spec.formulas.join(", ")} installed`;
     default:
       return count > 1
         ? `${count} transcriptions saved`
@@ -223,6 +233,11 @@ function doneTitle(job: Job): string {
 /** Whether a job saves audio, video or photos. */
 export function savesMedia(job: Job): boolean {
   return job.spec.kind === "media" || job.spec.kind === "images";
+}
+
+/** Whether a job's result is a file to open, rather than one only to show in Finder, like a model. */
+export function opensResult(job: Job): boolean {
+  return !["model", "install"].includes(job.spec.kind);
 }
 
 /** Whether a job saves transcripts, which can be copied as text. */
@@ -268,7 +283,7 @@ export function jobToast(job: Job, showQueue?: () => void) {
                   shortcut: Keyboard.Shortcut.Common.Copy,
                   onAction: () => copyText(outputs),
                 }
-              : savesMedia(job)
+              : savesMedia(job) || !opensResult(job)
                 ? {
                     title: "Show in Finder",
                     onAction: () => showInFinder(output),
@@ -284,9 +299,11 @@ export function jobToast(job: Job, showQueue?: () => void) {
             style: Toast.Style.Failure,
             title: `${capitalize(jobNoun(job.spec))} failed: ${job.title}`,
             message: job.error,
-            primaryAction: showQueue
-              ? { title: "Show Queue", onAction: showQueue }
-              : undefined,
+            primaryAction:
+              errorAction(job.error) ??
+              (showQueue
+                ? { title: "Show Queue", onAction: showQueue }
+                : undefined),
           }
         : { style: Toast.Style.Success, title: `Canceled ${job.title}` },
   );
@@ -383,6 +400,9 @@ export function QueueList({
                     <Action.Open title="Open File" target={output} />
                     <Action.ShowInFinder path={output} />
                   </>
+                )}
+                {output && !opensResult(job) && (
+                  <Action.ShowInFinder path={output} />
                 )}
                 {output && savesTranscripts(job) && (
                   <>

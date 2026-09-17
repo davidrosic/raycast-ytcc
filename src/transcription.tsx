@@ -10,6 +10,7 @@ import {
   whisperLanguageName,
   whisperLanguages,
 } from "./core";
+import { openSetup } from "./open-setup";
 import {
   TranscriptionOptions,
   WhisperModel,
@@ -171,6 +172,15 @@ export function TranscribeForm({
 
   if (!models.loaded) return <Form isLoading />;
 
+  const setupAction = (
+    <Action
+      title="Manage Tools and Models"
+      icon={Icon.Download}
+      shortcut={{ modifiers: ["cmd", "shift"], key: "m" }}
+      onAction={openSetup}
+    />
+  );
+
   return (
     <Form
       navigationTitle={
@@ -182,6 +192,7 @@ export function TranscribeForm({
       }
       actions={
         <ActionPanel>
+          {models.models.length === 0 && setupAction}
           <Action.SubmitForm
             title="Transcribe"
             icon={Icon.Microphone}
@@ -220,6 +231,7 @@ export function TranscribeForm({
               });
             }}
           />
+          {models.models.length > 0 && setupAction}
         </ActionPanel>
       }
     >
@@ -275,7 +287,7 @@ export function TranscribeForm({
             setModelError(undefined);
             setTranslateError(undefined);
           }}
-          info="large-v3 is the most accurate and the slowest. large-v3-turbo is much faster and nearly as accurate. Quantized models such as q5_0 are smaller and faster, and slightly less accurate."
+          info="large-v3 is the most accurate and the slowest. large-v3-turbo is much faster and nearly as accurate. Quantized models such as q5_0 are smaller and faster, and slightly less accurate. Download more in Manage Tools and Models."
         >
           {models.models.map((model) => (
             <Form.Dropdown.Item
@@ -288,7 +300,7 @@ export function TranscribeForm({
       ) : (
         <Form.Description
           title="Model"
-          text="No whisper model was found. Select ggml-large-v3-turbo.bin in extension preferences."
+          text="No whisper model is installed. Press ⌘⇧M to open Manage Tools and Models and download one, such as large-v3-turbo."
         />
       )}
       <Form.Checkbox

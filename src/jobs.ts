@@ -26,6 +26,8 @@ import {
   downloadPlaylistMedia,
   downloadPlaylistSubtitles,
 } from "./playlists";
+import { downloadModel } from "./models";
+import { installWithHomebrew } from "./setup";
 import {
   TranscriptionOptions,
   transcribeFile,
@@ -42,7 +44,10 @@ export type JobSpec =
   | ({ kind: "playlist" } & PlaylistDownload)
   | ({ kind: "playlist-media" } & PlaylistMediaDownload)
   | { kind: "media"; video: VideoRef; format: MediaFormat }
-  | { kind: "images"; video: VideoRef };
+  | { kind: "images"; video: VideoRef }
+  /** A whisper model from the catalog, downloaded into `folder`. */
+  | { kind: "model"; name: string; folder: string }
+  | { kind: "install"; formulas: string[] };
 
 export type JobStatus = "queued" | "running" | "done" | "failed" | "canceled";
 
@@ -311,7 +316,7 @@ function releaseLock(folder: string) {
  * one at a time, playlists one at a time so sites don't limit them, and a few
  * single downloads run beside them.
  */
-const laneLimits = { whisper: 1, playlist: 1, download: 3 };
+const laneLimits = { whisper: 1, playlist: 1, download: 3, homebrew: 1 };
 
 function lane(job: Job): keyof typeof laneLimits {
   switch (job.spec.kind) {
@@ -321,6 +326,8 @@ function lane(job: Job): keyof typeof laneLimits {
     case "playlist":
     case "playlist-media":
       return "playlist";
+    case "install":
+      return "homebrew";
     default:
       return "download";
   }
@@ -364,6 +371,15 @@ async function perform(
       );
     case "playlist-media":
       return await downloadPlaylistMedia(spec, settings, onProgress, signal);
+    case "model":
+      return {
+        outputs: [
+          await downloadModel(spec.name, spec.folder, onProgress, signal),
+        ],
+      };
+    case "install":
+      await installWithHomebrew(spec.formulas, onProgress, signal);
+      return {};
     case "images":
       return {
         outputs: await downloadImages(spec.video, settings, onProgress, signal),
@@ -480,6 +496,7 @@ export function queueSummary(jobs: Job[]): string | undefined {
   const groups: [JobSpec["kind"][], string][] = [
     [["file", "video"], "transcription"],
     [["media", "images"], "download"],
+    [["model"], "model download"],
   ];
   for (const [kinds, noun] of groups) {
     const group = jobs.filter((job) => kinds.includes(job.spec.kind));
@@ -502,6 +519,13 @@ export function queueSummary(jobs: Job[]): string | undefined {
     else if (done) parts.push(`${count(done, noun)} saved`);
     else if (failed) parts.push(`${count(failed, noun)} failed`);
   }
+  for (const job of jobs)
+    if (job.spec.kind === "install" && job.status !== "canceled")
+      parts.push(
+        job.status === "done"
+          ? `Installed ${job.spec.formulas.join(", ")}`
+          : `${job.title}: ${job.error}`,
+      );
   for (const job of jobs) {
     if (!isPlaylist(job) || job.status === "canceled") continue;
     const saved = job.outputs?.length ?? 0;
