@@ -351,7 +351,7 @@ export default function Command() {
         />
       )}
       <Action.Push
-        title="Show Transcription Queue"
+        title="Show Queue"
         icon={Icon.List}
         target={<QueueList settings={settings} />}
       />

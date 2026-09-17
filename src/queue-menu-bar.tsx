@@ -57,7 +57,7 @@ export default function Command() {
           .filter(Boolean)
           .join(" ") || undefined
       }
-      tooltip="Queue"
+      tooltip="YouTube Subtitles & Transcription Queue"
     >
       {active.length > 0 && (
         <MenuBarExtra.Section title="In Progress">

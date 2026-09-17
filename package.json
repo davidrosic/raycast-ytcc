@@ -1,7 +1,7 @@
 {
-  "name": "youtube-caption-workbench",
-  "title": "YouTube Download",
-  "description": "Download YouTube subtitles as RAW TXT, clean TXT, SRT or VTT, save audio or video, and transcribe videos or files from Finder with whisper.cpp",
+  "name": "youtube-subtitles-transcription",
+  "title": "YouTube Subtitles & Transcription",
+  "description": "Download YouTube subtitles, audio and video, including whole playlists and channels, and transcribe or translate any recording locally with whisper.cpp",
   "icon": "icon.png",
   "author": "davidrosic",
   "license": "MIT",
@@ -16,29 +16,29 @@
     {
       "name": "youtube-download",
       "title": "YouTube Download",
-      "subtitle": "Subtitles, audio & video",
-      "description": "Download subtitles in any language and format, or the video's audio and video, from a YouTube link",
+      "subtitle": "Subtitles, audio, video & playlists",
+      "description": "Download subtitles in any language and format, audio or video from a YouTube link, or subtitles for a whole playlist or channel",
       "mode": "view"
     },
     {
       "name": "transcribe-selected-files",
       "title": "Transcribe Selected Files",
       "subtitle": "Finder · whisper.cpp",
-      "description": "Transcribe the audio or video files selected in Finder with whisper.cpp large-v3-turbo",
+      "description": "Transcribe or translate the audio and video files or folders selected in Finder with whisper.cpp",
       "mode": "view"
     },
     {
       "name": "transcription-queue",
-      "title": "Transcription Queue",
-      "subtitle": "Progress, cancel & results",
-      "description": "See running, queued and finished transcriptions, cancel them, and open the results. The queue keeps running when you close Raycast.",
+      "title": "Queue",
+      "subtitle": "Transcriptions & playlist downloads",
+      "description": "See running, queued and finished transcriptions and playlist subtitle downloads, cancel them, and open the results. The queue keeps running when you close Raycast.",
       "mode": "view"
     },
     {
       "name": "queue-menu-bar",
-      "title": "Transcription Queue in Menu Bar",
-      "subtitle": "Progress while transcribing",
-      "description": "Shows transcription progress in the menu bar while the queue is running",
+      "title": "Queue in Menu Bar",
+      "subtitle": "Progress while jobs run",
+      "description": "Shows transcription and playlist download progress in the menu bar while the queue is running",
       "mode": "menu-bar",
       "interval": "10s"
     }
