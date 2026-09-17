@@ -613,6 +613,24 @@ export async function run(
   });
 }
 
+/**
+ * Options passed to every yt-dlp run. yt-dlp is given ffmpeg's path because
+ * Raycast's PATH usually doesn't include Homebrew, and subtitle conversion
+ * fails without it.
+ */
+async function ytDlpOptions(settings: Settings): Promise<string[]> {
+  const options = ["--no-warnings"];
+  try {
+    options.push(
+      "--ffmpeg-location",
+      await executable(settings.ffmpegPath, "ffmpeg"),
+    );
+  } catch {
+    /* yt-dlp reports a missing ffmpeg when a conversion needs it */
+  }
+  return options;
+}
+
 /** Reads video details with yt-dlp; YouTube links are normalized to a single watch URL. */
 export async function inspectMedia(
   urlInput: string,
@@ -829,9 +847,9 @@ export async function downloadCaption(
               : caption.formats[0];
     const langPattern = `^${caption.language.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`;
     const args = [
+      ...(await ytDlpOptions(settings)),
       "--no-playlist",
       "--skip-download",
-      "--no-warnings",
       "--sub-langs",
       langPattern,
       "--sub-format",
