@@ -2,7 +2,7 @@ import { Form, getSelectedFinderItems } from "@raycast/api";
 import { useEffect, useState } from "react";
 import { defaultWhisperLanguage, localFileInfo } from "./core";
 import { preferences } from "./preferences";
-import { QueueList, addToQueue, fileJobs } from "./queue";
+import { QueueList, addToQueue, fileJobs, jobToast } from "./queue";
 import { TranscribeForm, useFavoriteLanguages } from "./transcription";
 
 export { runQueueWorker } from "./jobs";
@@ -25,7 +25,8 @@ export default function Command() {
     );
   }, []);
 
-  if (queued) return <QueueList settings={settings} />;
+  if (queued)
+    return <QueueList settings={settings} onFinish={(job) => jobToast(job)} />;
   if (!selection || !favoriteLanguages.loaded) return <Form isLoading />;
 
   return (

@@ -51,6 +51,7 @@ Already opened the command? Paste a link with ⌘V and it loads immediately, rep
 | Key  | Action                                                                                                      |
 | ---- | ----------------------------------------------------------------------------------------------------------- |
 | ↵    | Download the selected language in the chosen format, or the selected audio/video format                     |
+| ⌘⇧C  | Download the selected language and copy its text to the clipboard                                           |
 | ⌘P   | Choose the subtitle format                                                                                  |
 | ⌘K   | More actions: other subtitle formats, Cancel Download, Show Queue, Edit Favorite Languages, and preferences |
 | Type | Filter the list, for example `english` or `mp3`                                                             |
@@ -78,6 +79,8 @@ Links typed by hand, and links to any other site [supported by yt-dlp](https://g
 Rows marked **Creator** are subtitles uploaded by the channel. Rows marked **Automatic** are YouTube's speech recognition. **(Original)** marks automatic captions in the video's spoken language.
 
 Files are named `Video Title [videoId] - language.srt`, with `- auto` for automatic captions and `- RAW` for RAW exports. If a file with the same name exists, a number is added.
+
+To paste a subtitle somewhere right away, press ⌘⇧C instead of ↵: the file is saved and its text copied to the clipboard. After a normal download, the toast offers **Copy Text**, and ⌘K offers **Copy Last Subtitle**.
 
 Press ⌘K and choose **Cancel Download** to stop a download. The progress toast has a Cancel button too.
 
@@ -155,7 +158,8 @@ Each result is saved next to its original file as `interview - whisper-Serbian.s
 Audio and video downloads, playlist downloads and transcriptions run in a background process, so they keep going when you close Raycast. Transcriptions run one at a time, and so do playlist downloads. Up to three audio and video downloads run beside them.
 
 - **Queue** lists running, queued and finished jobs. Cancel a running or queued job with ⌃X. For finished jobs you can open the result, show it in Finder, copy a transcript, try again, or clear the list.
-- **Queue in Menu Bar** shows the progress of the running job, for example `42% +2`, and hides itself when the queue is empty. Click a finished job to open it, or hold ⌥ to cancel a running one.
+- **Queue in Menu Bar** shows the progress of the running job, for example `42% +2`, and hides itself when the queue is empty. Hold ⌥ to cancel a running job. Jobs that finished in the last 15 minutes stay in the menu, where you can copy a transcript, open the result or show it in Finder.
+- When a transcription finishes while Raycast is open, the toast offers **Copy Transcript**.
 - When the queue finishes, a macOS notification sums up what was saved. Turn this off with **Notifications** in the preferences.
 
 A transcription that was running when your Mac shut down shows **Stopped before finishing**; choose **Try Again**.

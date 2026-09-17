@@ -1,9 +1,11 @@
 import {
   Action,
   ActionPanel,
+  Clipboard,
   Color,
   Form,
   Icon,
+  Keyboard,
   List,
   Toast,
   openExtensionPreferences,
@@ -11,6 +13,7 @@ import {
   showToast,
   useNavigation,
 } from "@raycast/api";
+import { readFileSync } from "node:fs";
 import { basename, dirname } from "node:path";
 import { useMemo, useRef, useState } from "react";
 import { preferences } from "./preferences";
@@ -41,9 +44,11 @@ import { cancelJob, isActive } from "./jobs";
 import {
   QueueList,
   addToQueue,
+  copyText,
   fileJobs,
   jobSubtitle,
   jobToast,
+  savesTranscripts,
   useQueue,
 } from "./queue";
 import {
@@ -101,50 +106,66 @@ export default function Command() {
   const [downloadCount, setDownloadCount] = useState(0);
   const busy = downloadCount > 0;
   const [lastFile, setLastFile] = useState<string>();
+  const [lastText, setLastText] = useState<{ paths: string[]; noun: string }>();
   const showQueue = () => push(<QueueList settings={settings} />);
   const queue = useQueue(settings, (job) => {
-    if (job.outputs?.length) setLastFile(job.outputs[0]);
+    if (job.outputs?.length) {
+      setLastFile(job.outputs[0]);
+      if (savesTranscripts(job))
+        setLastText({ paths: job.outputs, noun: "Transcript" });
+    }
     jobToast(job, showQueue);
   });
   const [selectedFormat, setSelectedFormat] = useState<ExportFormat>("raw");
   const ytDlp = useYtDlpUpdate(settings);
   const downloads = useRef(new Set<AbortController>());
 
-  /** Runs a download with a toast that can cancel it. */
-  async function withDownload(
-    title: string,
-    work: (
-      signal: AbortSignal,
-      onProgress: (message: string) => void,
-    ) => Promise<string | string[]>,
-    saved: (count: number) => string,
-  ) {
+  /**
+   * Downloads a caption with a toast that can cancel it. With `copy`, its text
+   * is copied to the clipboard as soon as it is saved.
+   */
+  async function save(caption: Caption, format: ExportFormat, copy = false) {
+    if (!video) return;
     const controller = new AbortController();
     downloads.current.add(controller);
     setDownloadCount(downloads.current.size);
     const toast = await showToast({
       style: Toast.Style.Animated,
-      title,
+      title: `Downloading ${caption.language} ${formatTitle(format)}…`,
       primaryAction: {
         title: "Cancel Download",
         onAction: () => controller.abort(),
       },
     });
     try {
-      const paths = [
-        await work(controller.signal, (message) => {
+      const path = await downloadCaption(
+        video,
+        caption,
+        format,
+        settings,
+        (message) => {
           toast.title = message;
-        }),
-      ].flat();
-      const path = paths[0];
+        },
+        controller.signal,
+      );
       setLastFile(path);
-      toast.style = Toast.Style.Success;
-      toast.title = saved(paths.length);
-      toast.message = paths.join("\n");
-      toast.primaryAction = {
+      setLastText({ paths: [path], noun: "Subtitle" });
+      if (copy) await Clipboard.copy(readFileSync(path, "utf8"));
+      const showFile = {
         title: "Show in Finder",
         onAction: () => showInFinder(path),
       };
+      toast.style = Toast.Style.Success;
+      toast.title = copy ? "Subtitle saved and copied" : "Subtitle saved";
+      toast.message = path;
+      toast.primaryAction = copy
+        ? showFile
+        : {
+            title: "Copy Text",
+            shortcut: Keyboard.Shortcut.Common.Copy,
+            onAction: () => copyText([path], "Subtitle"),
+          };
+      toast.secondaryAction = copy ? undefined : showFile;
     } catch (error) {
       toast.primaryAction = undefined;
       if (isCanceled(error)) {
@@ -159,16 +180,6 @@ export default function Command() {
       downloads.current.delete(controller);
       setDownloadCount(downloads.current.size);
     }
-  }
-
-  function save(caption: Caption, format: ExportFormat) {
-    if (!video) return;
-    withDownload(
-      `Downloading ${caption.language} ${formatTitle(format)}…`,
-      (signal, onProgress) =>
-        downloadCaption(video, caption, format, settings, onProgress, signal),
-      () => "Subtitle saved",
-    );
   }
 
   function media(format: MediaFormat) {
@@ -370,6 +381,13 @@ export default function Command() {
           }
         />
       )}
+      {lastText && (
+        <Action
+          title={`Copy Last ${lastText.noun}`}
+          icon={Icon.CopyClipboard}
+          onAction={() => copyText(lastText.paths, lastText.noun)}
+        />
+      )}
       {lastFile && (
         <Action
           title="Show Last File in Finder"
@@ -422,6 +440,12 @@ export default function Command() {
             title={`Download ${formatTitle(selectedFormat)}`}
             icon={Icon.Download}
             onAction={() => save(caption, selectedFormat)}
+          />
+          <Action
+            title="Download and Copy Text"
+            icon={Icon.CopyClipboard}
+            shortcut={Keyboard.Shortcut.Common.Copy}
+            onAction={() => save(caption, selectedFormat, true)}
           />
           <ActionPanel.Submenu
             title="Other Caption Formats"

@@ -1,8 +1,10 @@
 import { preferences } from "./preferences";
-import { QueueList } from "./queue";
+import { QueueList, jobToast } from "./queue";
 
 export { runQueueWorker } from "./jobs";
 
 export default function Command() {
-  return <QueueList settings={preferences()} />;
+  return (
+    <QueueList settings={preferences()} onFinish={(job) => jobToast(job)} />
+  );
 }

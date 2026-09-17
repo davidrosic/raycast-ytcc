@@ -210,8 +210,34 @@ function doneTitle(job: Job): string {
   }
 }
 
+/** Whether a job saves transcripts, which can be copied as text. */
+export function savesTranscripts(job: Job): boolean {
+  return job.spec.kind === "file" || job.spec.kind === "video";
+}
+
+/** Copies the text of transcripts or subtitles; several are separated by a blank line. */
+export async function copyText(paths: string[], noun = "Transcript") {
+  try {
+    await Clipboard.copy(
+      paths.map((path) => readFileSync(path, "utf8").trim()).join("\n\n") +
+        "\n",
+    );
+    await showToast({
+      style: Toast.Style.Success,
+      title: paths.length > 1 ? `${noun}s copied` : `${noun} copied`,
+    });
+  } catch (error) {
+    await showToast({
+      style: Toast.Style.Failure,
+      title: `Could not copy the ${noun.toLowerCase()}`,
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
 export function jobToast(job: Job, showQueue?: () => void) {
   const output = job.folder ?? job.outputs?.[0];
+  const outputs = job.outputs ?? [];
   showToast(
     job.status === "done"
       ? {
@@ -220,12 +246,23 @@ export function jobToast(job: Job, showQueue?: () => void) {
           message: job.spec.kind === "playlist" ? jobSubtitle(job) : output,
           primaryAction: !output
             ? undefined
-            : job.spec.kind === "media"
+            : savesTranscripts(job)
               ? {
-                  title: "Show in Finder",
-                  onAction: () => showInFinder(output),
+                  title:
+                    outputs.length > 1 ? "Copy Transcripts" : "Copy Transcript",
+                  shortcut: Keyboard.Shortcut.Common.Copy,
+                  onAction: () => copyText(outputs),
                 }
-              : { title: "Open", onAction: () => open(output) },
+              : job.spec.kind === "media"
+                ? {
+                    title: "Show in Finder",
+                    onAction: () => showInFinder(output),
+                  }
+                : { title: "Open", onAction: () => open(output) },
+          secondaryAction:
+            output && savesTranscripts(job)
+              ? { title: "Open Transcript", onAction: () => open(output) }
+              : undefined,
         }
       : job.status === "failed"
         ? {
@@ -240,9 +277,18 @@ export function jobToast(job: Job, showQueue?: () => void) {
   );
 }
 
-/** Running, queued and finished jobs, with actions to cancel, retry and open results. */
-export function QueueList({ settings }: { settings: Settings }) {
-  const { folder, jobs, refresh } = useQueue(settings);
+/**
+ * Running, queued and finished jobs, with actions to cancel, retry and open
+ * results. `onFinish` is called for jobs that finish while the list is shown.
+ */
+export function QueueList({
+  settings,
+  onFinish,
+}: {
+  settings: Settings;
+  onFinish?: (job: Job) => void;
+}) {
+  const { folder, jobs, refresh } = useQueue(settings, onFinish);
   const active = jobs.filter(isActive);
   const finished = jobs.filter((job) => !isActive(job));
 
@@ -271,7 +317,8 @@ export function QueueList({ settings }: { settings: Settings }) {
   );
 
   const item = (job: Job) => {
-    const output = job.spec.kind === "playlist" ? undefined : job.outputs?.[0];
+    const outputs = job.spec.kind === "playlist" ? [] : (job.outputs ?? []);
+    const output = outputs[0];
     const savedFolder = job.folder;
     const source = job.spec.kind === "file" ? job.spec.path : undefined;
     const elapsed =
@@ -322,18 +369,19 @@ export function QueueList({ settings }: { settings: Settings }) {
                     <Action.ShowInFinder path={output} />
                   </>
                 )}
-                {output && job.spec.kind !== "media" && (
+                {output && savesTranscripts(job) && (
                   <>
                     <Action.Open title="Open Transcript" target={output} />
                     <Action.ShowInFinder path={output} />
                     <Action
-                      title="Copy Transcript"
+                      title={
+                        outputs.length > 1
+                          ? "Copy Transcripts"
+                          : "Copy Transcript"
+                      }
                       icon={Icon.CopyClipboard}
                       shortcut={Keyboard.Shortcut.Common.Copy}
-                      onAction={async () => {
-                        await Clipboard.copy(readFileSync(output, "utf8"));
-                        await showToast({ title: "Transcript copied" });
-                      }}
+                      onAction={() => copyText(outputs)}
                     />
                   </>
                 )}

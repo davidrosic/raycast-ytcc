@@ -15,7 +15,7 @@ import {
   startWorker,
   workerProcess,
 } from "./jobs";
-import { jobIcon, jobSubtitle } from "./queue";
+import { copyText, jobIcon, jobSubtitle, savesTranscripts } from "./queue";
 
 export { runQueueWorker } from "./jobs";
 
@@ -83,29 +83,47 @@ export default function Command() {
       {recent.length > 0 && (
         <MenuBarExtra.Section title="Finished">
           {recent.map((job) => {
-            const output = job.folder ?? job.outputs?.[0];
+            const outputs = job.outputs ?? [];
+            const output = job.folder ?? outputs[0];
+            if (!output)
+              return (
+                <MenuBarExtra.Item
+                  key={job.id}
+                  icon={jobIcon(job)}
+                  title={job.title}
+                  subtitle={jobSubtitle(job)}
+                  onAction={showQueue}
+                />
+              );
             return (
-              <MenuBarExtra.Item
+              <MenuBarExtra.Submenu
                 key={job.id}
                 icon={jobIcon(job)}
                 title={job.title}
-                subtitle={jobSubtitle(job)}
-                tooltip={
-                  output
-                    ? "Click to open, or hold ⌥ to show in Finder"
-                    : undefined
-                }
-                onAction={output ? () => open(output) : showQueue}
-                alternate={
-                  output ? (
-                    <MenuBarExtra.Item
-                      icon={Icon.Finder}
-                      title={`Show ${job.title} in Finder`}
-                      onAction={() => showInFinder(output)}
-                    />
-                  ) : undefined
-                }
-              />
+              >
+                <MenuBarExtra.Item title={jobSubtitle(job)} />
+                {savesTranscripts(job) && (
+                  <MenuBarExtra.Item
+                    icon={Icon.CopyClipboard}
+                    title={
+                      outputs.length > 1
+                        ? "Copy Transcripts"
+                        : "Copy Transcript"
+                    }
+                    onAction={() => copyText(outputs)}
+                  />
+                )}
+                <MenuBarExtra.Item
+                  icon={Icon.ArrowNe}
+                  title={job.folder ? "Open Folder" : "Open"}
+                  onAction={() => open(output)}
+                />
+                <MenuBarExtra.Item
+                  icon={Icon.Finder}
+                  title="Show in Finder"
+                  onAction={() => showInFinder(output)}
+                />
+              </MenuBarExtra.Submenu>
             );
           })}
         </MenuBarExtra.Section>
