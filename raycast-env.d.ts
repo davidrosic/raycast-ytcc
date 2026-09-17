@@ -8,11 +8,11 @@
 /* eslint-disable @typescript-eslint/ban-types */
 
 type ExtensionPreferences = {
-  /** Download Folder - Where subtitles, audio and video are saved */
+  /** Download Folder - Where subtitles, audio, video and YouTube transcriptions are saved */
   "downloadDirectory"?: string,
   /** yt-dlp Executable - Optional; otherwise found in PATH or common Homebrew locations */
   "ytDlpPath"?: string,
-  /** ffmpeg Executable - Needed for audio conversion, MP4 merging, and Whisper transcription */
+  /** ffmpeg Executable - Needed for MP3, M4A and MP4, subtitle conversion, and transcription */
   "ffmpegPath"?: string,
   /** Browser Sign-In - Off by default. Choose the browser you're signed in to YouTube with to download age-restricted, private and members-only videos. yt-dlp reads that browser's cookies on your Mac; they are never sent anywhere else. */
   "browserCookies": "none" | "safari" | "chrome" | "firefox" | "brave" | "edge" | "chromium" | "opera" | "vivaldi",
@@ -24,9 +24,9 @@ type ExtensionPreferences = {
   "skipSilence": boolean,
   /** Silero VAD Model - Optional; ggml-silero-v6.2.0.bin (885 KB) is downloaded automatically when not set */
   "vadModelPath"?: string,
-  /** Notifications - Show a macOS notification when all queued transcriptions are done */
+  /** Notifications - Show a macOS notification when everything in the queue is done */
   "notifyWhenDone": boolean,
-  /** Transcription Language - Spoken language, for example Serbian or auto */
+  /** Transcription Language - Spoken language to preselect when no favorite language matches, for example Serbian or auto */
   "whisperLanguage": string,
   /** Favorite Caption Languages - Comma-separated language names or codes; case and '(orig)' are ignored (for example Serbian, English) */
   "favoriteLanguages": string
