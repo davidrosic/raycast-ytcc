@@ -266,3 +266,42 @@ test("names transcripts and knows which models can translate", () => {
     "/m/ggml-large-v3-turbo-encoder.mlmodelc",
   );
 });
+
+test("finds audio and video files in chosen folders", () => {
+  const { mkdirSync, writeFileSync } = require("node:fs");
+  const root = join(temporary, "media");
+  for (const folder of ["Show", "Show/Season 1", "Show/.hidden", "Tool.app"])
+    mkdirSync(join(root, folder), { recursive: true });
+  for (const file of [
+    "Show/Episode 10.mp4",
+    "Show/Episode 2.m4a",
+    "Show/notes.txt",
+    "Show/Season 1/Intro.WAV",
+    "Show/.hidden/secret.mp3",
+    "Show/.DS_Store",
+    "Tool.app/sound.mp3",
+    "notes.txt",
+  ])
+    writeFileSync(join(root, file), "");
+  const names = (paths) => paths.map((path) => path.slice(root.length + 1));
+  assert.deepEqual(names(core.mediaFiles([join(root, "Show")])), [
+    "Show/Episode 2.m4a",
+    "Show/Episode 10.mp4",
+    "Show/Season 1/Intro.WAV",
+  ]);
+  assert.deepEqual(
+    names(
+      core.mediaFiles([
+        join(root, "notes.txt"),
+        join(root, "Show/Episode 2.m4a"),
+        root,
+      ]),
+    ),
+    [
+      "notes.txt",
+      "Show/Episode 2.m4a",
+      "Show/Episode 10.mp4",
+      "Show/Season 1/Intro.WAV",
+    ],
+  );
+});

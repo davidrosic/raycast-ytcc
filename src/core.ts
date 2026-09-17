@@ -9,9 +9,9 @@ import {
   stat,
   writeFile,
 } from "node:fs/promises";
-import { constants, statSync } from "node:fs";
+import { constants, readdirSync, statSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { basename, join, resolve } from "node:path";
+import { basename, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export type CaptionKind = "manual" | "automatic";
@@ -187,6 +187,55 @@ export function localFileInfo(
   } catch {
     return undefined;
   }
+}
+
+const mediaExtensions = new Set(
+  "3gp aac aif aiff amr avi caf flac flv m2ts m4a m4b m4v mka mkv mov mp2 mp3 mp4 mpeg mpg mts oga ogg opus ts wav webm wma wmv"
+    .split(" ")
+    .map((extension) => `.${extension}`),
+);
+
+export function isMediaFile(path: string): boolean {
+  return mediaExtensions.has(extname(path).toLowerCase());
+}
+
+/**
+ * The files to transcribe from chosen files and folders. Files are kept as
+ * chosen; folders are searched, including subfolders, for audio and video
+ * files. Hidden files and app bundles are skipped, and duplicates removed.
+ */
+export function mediaFiles(paths: string[], limit = 2000): string[] {
+  const files = new Set<string>();
+  const visit = (path: string, chosen: boolean) => {
+    if (files.size >= limit) return;
+    let info;
+    try {
+      info = statSync(path);
+    } catch {
+      return;
+    }
+    if (info.isFile()) {
+      if (chosen || isMediaFile(path)) files.add(path);
+      return;
+    }
+    if (
+      !info.isDirectory() ||
+      (!chosen && /\.(app|bundle|photoslibrary)$/i.test(path))
+    )
+      return;
+    let entries: string[];
+    try {
+      entries = readdirSync(path);
+    } catch {
+      return;
+    }
+    entries
+      .filter((entry) => !entry.startsWith("."))
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+      .forEach((entry) => visit(join(path, entry), false));
+  };
+  paths.forEach((path) => visit(path, true));
+  return [...files];
 }
 
 export function formatSize(bytes: number): string {

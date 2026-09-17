@@ -9,12 +9,12 @@ import {
   showToast,
 } from "@raycast/api";
 import { basename } from "node:path";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ExportFormat,
   Settings,
   formatSize,
-  localFileInfo,
+  mediaFiles,
   rankFavorites,
   whisperLanguageName,
   whisperLanguages,
@@ -183,13 +183,15 @@ export function TranscribeForm({
     />
   );
 
+  const files = useMemo(() => mediaFiles(paths), [paths]);
+
   if (!models.loaded) return <Form isLoading />;
 
   return (
     <Form
       isLoading={isLoading}
       navigationTitle={
-        paths.length === 1 ? `Transcribe ${basename(paths[0])}` : "Transcribe"
+        files.length === 1 ? `Transcribe ${basename(files[0])}` : "Transcribe"
       }
       actions={
         <ActionPanel>
@@ -203,9 +205,10 @@ export function TranscribeForm({
               translate: boolean;
             }) => {
               if (isLoading) return;
-              const files = paths.filter((path) => localFileInfo(path)?.isFile);
               if (!files.length) {
-                setFilesError("Choose at least one audio or video file");
+                setFilesError(
+                  "Choose audio or video files, or a folder that contains some",
+                );
                 return;
               }
               const model = models.models.find(
@@ -243,10 +246,20 @@ export function TranscribeForm({
           setPaths(value);
           setFilesError(undefined);
         }}
-        canChooseDirectories={false}
+        canChooseDirectories
         allowMultipleSelection
         error={filesError}
+        info="Folders are searched, including subfolders, for audio and video files."
       />
+      {files.length !== paths.length && (
+        <Form.Description
+          text={
+            files.length === 1
+              ? "1 audio or video file will be transcribed."
+              : `${files.length} audio and video files will be transcribed, one after another.`
+          }
+        />
+      )}
       <Form.Dropdown
         id="language"
         title="Spoken Language"

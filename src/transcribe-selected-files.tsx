@@ -19,8 +19,8 @@ export default function Command() {
       (items) =>
         setSelection(
           items
-            .map((item) => item.path)
-            .filter((path) => localFileInfo(path)?.isFile),
+            .map((item) => item.path.replace(/(.)\/$/, "$1"))
+            .filter((path) => localFileInfo(path)),
         ),
       () => setSelection([]),
     );
@@ -41,7 +41,7 @@ export default function Command() {
       note={
         selection.length
           ? undefined
-          : "No files are selected in Finder. Choose files below, or select them in Finder before opening this command."
+          : "Nothing is selected in Finder. Choose files or folders below, or select them in Finder before opening this command."
       }
       onTranscribe={async (paths, options) => {
         setRunning(true);
