@@ -59,8 +59,8 @@
     },
     {
       "name": "modelPath",
-      "title": "Large V3 Turbo Model",
-      "description": "Path to ggml-large-v3-turbo.bin; auto-detected beside whisper.cpp when available",
+      "title": "Default Whisper Model",
+      "description": "Path to a ggml model, such as ggml-large-v3-turbo.bin; found next to whisper.cpp when not set. Other models in the same folder can be chosen when transcribing.",
       "type": "file",
       "required": false
     },

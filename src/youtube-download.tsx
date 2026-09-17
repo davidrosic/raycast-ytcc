@@ -38,6 +38,7 @@ import {
   formatTitle,
   transcribeWithToast,
   useFavoriteLanguages,
+  useWhisperModels,
 } from "./transcription";
 import {
   detailMarkdown,
@@ -47,7 +48,7 @@ import {
   useVideo,
   videoDetail,
 } from "./video";
-import { transcribe } from "./whisper";
+import { TranscriptionOptions, modelName, transcribe } from "./whisper";
 
 /** The video URL for search text that is a link, or undefined for filter text and unfinished links. */
 function typedLink(text: string): { isLink: boolean; url?: string } {
@@ -177,15 +178,13 @@ export default function Command() {
 
   async function transcribeLocal(
     paths: string[],
-    language: string,
-    format: ExportFormat,
+    options: TranscriptionOptions,
   ) {
     setBusy(true);
     try {
       const outputs = await transcribeWithToast(
         paths,
-        language,
-        format,
+        options,
         settings,
         (path, message) => {
           setActiveFile(path);
@@ -200,6 +199,7 @@ export default function Command() {
     }
   }
 
+  const { defaultModel } = useWhisperModels(settings);
   const whisperLanguage = defaultWhisperLanguage(
     favoriteLanguages.value,
     settings.whisperLanguage,
@@ -209,11 +209,12 @@ export default function Command() {
     return (
       <TranscribeForm
         initialPaths={[path]}
+        settings={settings}
         favoriteLanguages={favoriteLanguages.value}
         defaultLanguage={whisperLanguage}
-        onTranscribe={(paths, language, format) => {
+        onTranscribe={(paths, options) => {
           pop();
-          transcribeLocal(paths, language, format);
+          transcribeLocal(paths, options);
         }}
       />
     );
@@ -428,7 +429,12 @@ export default function Command() {
                             text: whisperLanguageName(whisperLanguage),
                           },
                           { title: "Output", text: formatTitle("raw") },
-                          { title: "Model", text: "ggml-large-v3-turbo" },
+                          {
+                            title: "Model",
+                            text: defaultModel
+                              ? modelName(defaultModel)
+                              : "Not found",
+                          },
                         ],
                       }
                     : {
@@ -456,7 +462,10 @@ export default function Command() {
                       }
                       icon={Icon.Waveform}
                       onAction={() =>
-                        transcribeLocal([filePath], whisperLanguage, "raw")
+                        transcribeLocal([filePath], {
+                          language: whisperLanguage,
+                          format: "raw",
+                        })
                       }
                     />
                     <Action.ShowInFinder path={filePath} />
@@ -495,10 +504,16 @@ export default function Command() {
           <List.Section title="No Captions Available">
             <List.Item
               title="Transcribe with Whisper"
-              subtitle={progress || "Local large-v3-turbo"}
+              subtitle={
+                progress ||
+                (defaultModel ? `Local ${modelName(defaultModel)}` : "Local")
+              }
               icon={Icon.Microphone}
               detail={videoDetail(state, [
-                { title: "Model", text: "ggml-large-v3-turbo" },
+                {
+                  title: "Model",
+                  text: defaultModel ? modelName(defaultModel) : "Not found",
+                },
                 {
                   title: "Spoken Language",
                   text: settings.whisperLanguage?.trim() || "Serbian",

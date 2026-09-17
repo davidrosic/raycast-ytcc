@@ -11,7 +11,7 @@ import {
   rm,
   writeFile,
 } from "node:fs/promises";
-import { constants } from "node:fs";
+import { constants, existsSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, parse } from "node:path";
 import {
@@ -127,29 +127,119 @@ async function vadModel(
   return downloaded;
 }
 
+export type WhisperModel = {
+  path: string;
+  /** The file name without `ggml-` and `.bin`, for example `large-v3-turbo-q5_0`. */
+  name: string;
+  size: number;
+  /** The Core ML encoder this model still needs, when whisper.cpp was built with Core ML. */
+  missingEncoder?: string;
+};
+
+export function modelName(path: string): string {
+  return basename(path)
+    .replace(/^ggml-/, "")
+    .replace(/\.bin$/, "");
+}
+
+/** The models folder of a whisper.cpp checkout, from its `build/bin/whisper-cli`. */
+function checkoutModels(whisper: string): string {
+  return join(dirname(dirname(dirname(whisper))), "models");
+}
+
+function defaultModelPath(settings: Settings, whisper: string): string {
+  return (
+    settings.modelPath ||
+    join(checkoutModels(whisper), "ggml-large-v3-turbo.bin")
+  );
+}
+
+/** The Core ML encoder whisper.cpp loads for a model; quantized models share their base model's encoder. */
+export function coreMlEncoder(model: string): string {
+  return `${model.replace(/\.[^./]*$/, "").replace(/-q\d_\d$/, "")}-encoder.mlmodelc`;
+}
+
+/** Whether whisper-cli was built with Core ML, which needs an encoder next to every model. */
+function usesCoreMl(whisper: string): boolean {
+  try {
+    const bin = dirname(realpathSync(whisper));
+    return [join(bin, "..", "src"), join(bin, "..", "lib"), bin].some(
+      (folder) => existsSync(join(folder, "libwhisper.coreml.dylib")),
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Whisper models next to the default model, in the whisper.cpp checkout, and in
+ * the extension's support folder. The default model comes first, then larger
+ * (more accurate) models before smaller ones.
+ */
+export async function whisperModels(
+  settings: Settings,
+): Promise<{ models: WhisperModel[]; defaultModel?: string }> {
+  let whisper: string | undefined;
+  try {
+    whisper = await executable(settings.whisperPath, "whisper-cli");
+  } catch {
+    return { models: [] };
+  }
+  const defaultModel = defaultModelPath(settings, whisper);
+  const coreMl = usesCoreMl(whisper);
+  const folders = [
+    dirname(defaultModel),
+    checkoutModels(whisper),
+    ...(settings.supportPath ? [join(settings.supportPath, "models")] : []),
+  ];
+  const paths = new Set<string>();
+  if (localFileInfo(defaultModel)?.isFile) paths.add(defaultModel);
+  for (const folder of new Set(folders)) {
+    try {
+      for (const file of await readdir(folder))
+        if (/^ggml-.+\.bin$/i.test(file) && !/silero/i.test(file))
+          paths.add(join(folder, file));
+    } catch {
+      /* missing folder */
+    }
+  }
+  const models: WhisperModel[] = [];
+  for (const path of paths) {
+    const info = localFileInfo(path);
+    if (!info?.isFile) continue;
+    const encoder = coreMlEncoder(path);
+    models.push({
+      path,
+      name: modelName(path),
+      size: info.size,
+      missingEncoder:
+        coreMl && !existsSync(encoder) ? basename(encoder) : undefined,
+    });
+  }
+  models.sort(
+    (a, b) =>
+      Number(b.path === defaultModel) - Number(a.path === defaultModel) ||
+      b.size - a.size,
+  );
+  return {
+    models,
+    defaultModel: paths.has(defaultModel) ? defaultModel : models[0]?.path,
+  };
+}
+
 async function whisperSetup(
   settings: Settings,
+  chosenModel?: string,
   onProgress?: (message: string) => void,
 ): Promise<WhisperSetup> {
   const whisper = await executable(settings.whisperPath, "whisper-cli");
-  const model =
-    settings.modelPath ||
-    join(
-      dirname(dirname(dirname(whisper))),
-      "models",
-      "ggml-large-v3-turbo.bin",
-    );
-  if (!model || basename(model) !== "ggml-large-v3-turbo.bin")
+  const model = chosenModel || defaultModelPath(settings, whisper);
+  if (!(await readable(model)))
     throw new Error(
-      "Set the path to ggml-large-v3-turbo.bin in extension preferences.",
+      chosenModel || settings.modelPath
+        ? `${basename(model)} was not found. Choose another model, or select one in extension preferences.`
+        : "No whisper model was found. Select ggml-large-v3-turbo.bin in extension preferences.",
     );
-  try {
-    await access(model, constants.R_OK);
-  } catch {
-    throw new Error(
-      "ggml-large-v3-turbo.bin was not found. Select the model file in extension preferences.",
-    );
-  }
   return {
     whisper,
     model,
@@ -211,7 +301,7 @@ async function runWhisper(
   onProgress?: (message: string) => void,
 ): Promise<string> {
   const result = join(temporary, "result");
-  onProgress?.("Transcribing with large-v3-turbo…");
+  onProgress?.(`Transcribing with ${modelName(model)}…`);
   try {
     await run(
       whisper,
@@ -234,6 +324,13 @@ async function runWhisper(
       },
     );
   } catch (error) {
+    const coreMl =
+      error instanceof Error &&
+      /failed to load Core ML model from '([^']+)'/.exec(error.message);
+    if (coreMl)
+      throw new Error(
+        `This whisper.cpp build uses Core ML, and ${modelName(model)} has no Core ML encoder (${basename(coreMl[1])}). Create it with ./models/generate-coreml-model.sh ${modelName(model).replace(/-q\d_\d$/, "")} in whisper.cpp, or choose another model.`,
+      );
     if (
       vad &&
       error instanceof Error &&
@@ -254,16 +351,23 @@ async function runWhisper(
  * in the chosen format next to it, or in the download folder when that folder
  * is not writable.
  */
+export type TranscriptionOptions = {
+  /** A whisper.cpp language code, or `auto`. */
+  language: string;
+  format: ExportFormat;
+  /** The model file; the default model when not set. */
+  model?: string;
+};
+
 export async function transcribeFile(
   path: string,
-  language: string,
-  format: ExportFormat,
+  { language, format, model }: TranscriptionOptions,
   settings: Settings,
   onProgress?: (message: string) => void,
 ): Promise<string> {
   if (!localFileInfo(path)?.isFile)
     throw new Error(`${path} is not a file that can be read.`);
-  const setup = await whisperSetup(settings, onProgress);
+  const setup = await whisperSetup(settings, model, onProgress);
   const temporary = await mkdtemp(join(tmpdir(), "raycast-whisper-"));
   try {
     const wav = await whisperAudio(path, temporary, settings, onProgress);
@@ -314,7 +418,7 @@ export async function transcribe(
     throw new Error(
       "This video has captions. Choose an available caption track to download.",
     );
-  const setup = await whisperSetup(settings, onProgress);
+  const setup = await whisperSetup(settings, undefined, onProgress);
   const ytDlp = await executable(settings.ytDlpPath, "yt-dlp");
   const destination = await outputDirectory(settings);
   const temporary = await mkdtemp(join(tmpdir(), "raycast-whisper-"));

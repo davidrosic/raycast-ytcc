@@ -31,6 +31,7 @@ export default function Command() {
   return (
     <TranscribeForm
       initialPaths={selection}
+      settings={settings}
       favoriteLanguages={favoriteLanguages.value}
       defaultLanguage={defaultWhisperLanguage(
         favoriteLanguages.value,
@@ -42,10 +43,10 @@ export default function Command() {
           ? undefined
           : "No files are selected in Finder. Choose files below, or select them in Finder before opening this command."
       }
-      onTranscribe={async (paths, language, format) => {
+      onTranscribe={async (paths, options) => {
         setRunning(true);
         try {
-          await transcribeWithToast(paths, language, format, settings);
+          await transcribeWithToast(paths, options, settings);
         } finally {
           setRunning(false);
         }

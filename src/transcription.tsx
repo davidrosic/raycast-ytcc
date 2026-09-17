@@ -13,12 +13,19 @@ import { useEffect, useState } from "react";
 import {
   ExportFormat,
   Settings,
+  formatSize,
   localFileInfo,
   rankFavorites,
   whisperLanguageName,
   whisperLanguages,
 } from "./core";
-import { transcribeFile } from "./whisper";
+import {
+  TranscriptionOptions,
+  WhisperModel,
+  modelName,
+  transcribeFile,
+  whisperModels,
+} from "./whisper";
 import { errorMessage } from "./video";
 
 export const captionFormats: { value: ExportFormat; title: string }[] = [
@@ -59,14 +66,31 @@ export function useFavoriteLanguages(settings: Settings) {
   };
 }
 
+/** Installed whisper models, with the default model first. */
+export function useWhisperModels(settings: Settings) {
+  const [state, setState] = useState<{
+    models: WhisperModel[];
+    defaultModel?: string;
+    loaded: boolean;
+  }>({ models: [], loaded: false });
+
+  useEffect(() => {
+    whisperModels(settings).then(
+      (value) => setState({ ...value, loaded: true }),
+      () => setState({ models: [], loaded: true }),
+    );
+  }, []);
+
+  return state;
+}
+
 /**
  * Transcribes files one after another, keeping a single toast up to date.
  * Returns the saved files; a failed file does not stop the rest.
  */
 export async function transcribeWithToast(
   paths: string[],
-  language: string,
-  format: ExportFormat,
+  options: TranscriptionOptions,
   settings: Settings,
   onProgress?: (path: string, message: string) => void,
 ): Promise<string[]> {
@@ -84,7 +108,7 @@ export async function transcribeWithToast(
     onProgress?.(path, "Preparing transcription…");
     try {
       outputs.push(
-        await transcribeFile(path, language, format, settings, (message) => {
+        await transcribeFile(path, options, settings, (message) => {
           toast.title = `${prefix}${message}`;
           onProgress?.(path, message);
         }),
@@ -116,9 +140,10 @@ export async function transcribeWithToast(
   return outputs;
 }
 
-/** Files, spoken language and output format; ⌘↵ submits. */
+/** Files, spoken language, output format and model; ⌘↵ submits. */
 export function TranscribeForm({
   initialPaths,
+  settings,
   favoriteLanguages,
   defaultLanguage,
   isLoading,
@@ -126,18 +151,17 @@ export function TranscribeForm({
   onTranscribe,
 }: {
   initialPaths: string[];
+  settings: Settings;
   favoriteLanguages: string;
   defaultLanguage: string;
   isLoading?: boolean;
   note?: string;
-  onTranscribe: (
-    paths: string[],
-    language: string,
-    format: ExportFormat,
-  ) => void;
+  onTranscribe: (paths: string[], options: TranscriptionOptions) => void;
 }) {
   const [paths, setPaths] = useState(initialPaths);
   const [filesError, setFilesError] = useState<string>();
+  const [modelError, setModelError] = useState<string>();
+  const models = useWhisperModels(settings);
   const names = (language: { code: string; name: string }) => [
     language.code,
     language.name,
@@ -157,6 +181,8 @@ export function TranscribeForm({
     />
   );
 
+  if (!models.loaded) return <Form isLoading />;
+
   return (
     <Form
       isLoading={isLoading}
@@ -168,14 +194,31 @@ export function TranscribeForm({
           <Action.SubmitForm
             title="Transcribe"
             icon={Icon.Microphone}
-            onSubmit={(values: { language: string; format: ExportFormat }) => {
+            onSubmit={(values: {
+              language: string;
+              format: ExportFormat;
+              model?: string;
+            }) => {
               if (isLoading) return;
               const files = paths.filter((path) => localFileInfo(path)?.isFile);
               if (!files.length) {
                 setFilesError("Choose at least one audio or video file");
                 return;
               }
-              onTranscribe(files, values.language, values.format);
+              const model = models.models.find(
+                (item) => item.path === values.model,
+              );
+              if (model?.missingEncoder) {
+                setModelError(
+                  `whisper.cpp uses Core ML and needs ${model.missingEncoder} for this model`,
+                );
+                return;
+              }
+              onTranscribe(files, {
+                language: values.language,
+                format: values.format,
+                model: model?.path,
+              });
             }}
           />
         </ActionPanel>
@@ -231,7 +274,40 @@ export function TranscribeForm({
           />
         ))}
       </Form.Dropdown>
-      <Form.Description text="⌘↵ converts the audio to 16 kHz WAV with ffmpeg and transcribes it with whisper.cpp large-v3-turbo. Each result is saved next to its file." />
+      {models.models.length > 0 ? (
+        <Form.Dropdown
+          id="model"
+          title="Model"
+          defaultValue={models.defaultModel}
+          error={modelError}
+          onChange={() => setModelError(undefined)}
+          info="large-v3 is the most accurate and the slowest. large-v3-turbo is much faster and nearly as accurate. Quantized models such as q5_0 are smaller and faster, and slightly less accurate."
+        >
+          {models.models.map((model) => (
+            <Form.Dropdown.Item
+              key={model.path}
+              value={model.path}
+              title={modelTitle(model)}
+            />
+          ))}
+        </Form.Dropdown>
+      ) : (
+        <Form.Description
+          title="Model"
+          text="No whisper model was found. Select ggml-large-v3-turbo.bin in extension preferences."
+        />
+      )}
+      <Form.Description text="⌘↵ converts the audio to 16 kHz WAV with ffmpeg and transcribes it with whisper.cpp. Each result is saved next to its file." />
     </Form>
   );
+}
+
+function modelTitle(model: WhisperModel): string {
+  return [
+    modelName(model.path),
+    formatSize(model.size),
+    model.missingEncoder && "needs Core ML encoder",
+  ]
+    .filter(Boolean)
+    .join(" · ");
 }
