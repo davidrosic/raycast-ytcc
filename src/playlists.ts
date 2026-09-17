@@ -3,11 +3,13 @@ import { join } from "node:path";
 import {
   Caption,
   ExportFormat,
+  MediaFormat,
   Settings,
   captionExtension,
   captionStem,
   canceledError,
   downloadCaption,
+  downloadMedia,
   inspectMedia,
   isCanceled,
   outputDirectory,
@@ -21,6 +23,8 @@ export type PlaylistEntry = {
   title: string;
   url: string;
   duration?: number;
+  /** A stream that is live now or hasn't started, which can't be downloaded yet. */
+  live?: boolean;
 };
 
 export type Playlist = {
@@ -44,6 +48,11 @@ export type PlaylistDownload = {
   language: string;
   captions: CaptionChoice;
   format: ExportFormat;
+};
+
+export type PlaylistMediaDownload = {
+  playlist: { title: string; url: string };
+  format: MediaFormat;
 };
 
 /**
@@ -75,6 +84,10 @@ export function parsePlaylist(data: unknown, url: string): Playlist {
         url: `https://www.youtube.com/watch?v=${id}`,
         duration:
           typeof entry.duration === "number" ? entry.duration : undefined,
+        live:
+          entry.live_status === "is_live" || entry.live_status === "is_upcoming"
+            ? true
+            : undefined,
       });
     }
   };
@@ -200,8 +213,37 @@ export function alreadySaved(
   });
 }
 
+/** Whether a folder already has this video's audio or video in the format. */
+export function alreadyDownloaded(
+  files: string[],
+  entry: Pick<PlaylistEntry, "id">,
+  format: MediaFormat,
+): string[] {
+  return files.filter(
+    (file) => file.includes(`[${entry.id}]`) && file.endsWith(`.${format}`),
+  );
+}
+
 export function playlistFolderName(title: string): string {
   return safeName(title);
+}
+
+/** Lists a playlist's videos and creates the folder its downloads are saved in. */
+async function playlistFolder(
+  playlist: PlaylistDownload["playlist"],
+  settings: Settings,
+  onProgress: (message: string, percent?: number) => void,
+  signal?: AbortSignal,
+) {
+  onProgress("Listing videos…");
+  const listed = await inspectPlaylist(playlist.url, settings, signal);
+  if (!listed.entries.length) throw new Error("This playlist has no videos.");
+  const folder = join(
+    await outputDirectory(settings),
+    playlistFolderName(listed.title || playlist.title),
+  );
+  await mkdir(folder, { recursive: true });
+  return { entries: listed.entries, folder, existing: await readdir(folder) };
 }
 
 /**
@@ -219,16 +261,12 @@ export async function downloadPlaylistSubtitles(
   outputs: string[];
   skipped: { title: string; reason: string }[];
 }> {
-  onProgress("Listing videos…");
-  const listed = await inspectPlaylist(playlist.url, settings, signal);
-  const { entries } = listed;
-  if (!entries.length) throw new Error("This playlist has no videos.");
-  const folder = join(
-    await outputDirectory(settings),
-    playlistFolderName(listed.title || playlist.title),
+  const { entries, folder, existing } = await playlistFolder(
+    playlist,
+    settings,
+    onProgress,
+    signal,
   );
-  await mkdir(folder, { recursive: true });
-  const existing = await readdir(folder);
   const outputs: string[] = [];
   const skipped: { title: string; reason: string }[] = [];
   const name = whisperLanguageName(language);
@@ -269,6 +307,78 @@ export async function downloadPlaylistSubtitles(
         `${captionStem(video, caption, format)}.${captionExtension(format)}`,
       );
       outputs.push(path);
+    } catch (error) {
+      if (isCanceled(error)) throw canceled();
+      skipped.push({
+        title: entry.title,
+        reason: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+  return { folder, outputs, skipped };
+}
+
+/**
+ * Downloads every video in a playlist as MP3, M4A or MP4 into a folder named
+ * after the playlist. Videos that already have a file in that format there are
+ * skipped, so an interrupted download continues where it stopped.
+ */
+export async function downloadPlaylistMedia(
+  { playlist, format }: PlaylistMediaDownload,
+  settings: Settings,
+  onProgress: (message: string, percent?: number) => void,
+  signal?: AbortSignal,
+): Promise<{
+  folder: string;
+  outputs: string[];
+  skipped: { title: string; reason: string }[];
+}> {
+  const { entries, folder, existing } = await playlistFolder(
+    playlist,
+    settings,
+    onProgress,
+    signal,
+  );
+  const outputs: string[] = [];
+  const skipped: { title: string; reason: string }[] = [];
+  const canceled = () =>
+    Object.assign(canceledError(), { partial: { folder, outputs, skipped } });
+  for (const [index, entry] of entries.entries()) {
+    if (signal?.aborted) throw canceled();
+    const status = `${index + 1} of ${entries.length} · ${entry.title}`;
+    onProgress(status, Math.floor((index / entries.length) * 100));
+    const saved = alreadyDownloaded(existing, entry, format);
+    if (saved.length) {
+      outputs.push(...saved.map((file) => join(folder, file)));
+      continue;
+    }
+    if (entry.live) {
+      skipped.push({
+        title: entry.title,
+        reason: "Live or upcoming stream, available after it ends",
+      });
+      continue;
+    }
+    try {
+      const files = await downloadMedia(
+        { id: entry.id, title: entry.title, url: entry.url },
+        format,
+        settings,
+        (message) => {
+          const percent = /(\d+)%/.exec(message);
+          onProgress(
+            status,
+            Math.floor(
+              ((index + (percent ? Number(percent[1]) / 100 : 0)) /
+                entries.length) *
+                100,
+            ),
+          );
+        },
+        signal,
+        folder,
+      );
+      outputs.push(...files);
     } catch (error) {
       if (isCanceled(error)) throw canceled();
       skipped.push({

@@ -5,7 +5,7 @@ Save YouTube subtitles in any available language as RAW text, clean text, SRT or
 - **Copy a link, open the command.** A YouTube, Instagram or X link in your clipboard loads right away, with no extra steps.
 - **See what you're downloading.** The video's thumbnail and title appear as soon as the link is recognized.
 - **Every subtitle track.** Creator subtitles and YouTube's automatic captions are all listed.
-- **Whole playlists and channels.** One subtitle file per video, with videos already downloaded skipped.
+- **Whole playlists and channels.** Subtitles, MP3, M4A or MP4 for every video, with videos already downloaded skipped.
 - **Your languages first.** Favorite languages are listed at the top, and `serbian`, `Serbian` and `serbian (orig)` all match the same language.
 - **Audio and video from most sites.** Save MP3, M4A or MP4 in the best available quality, including every video in an X post or Instagram carousel.
 - **Transcribe your own files.** Select recordings or folders in Finder, pick the language, output and model, and press ⌘↵.
@@ -29,12 +29,12 @@ The extension finds these tools in your `PATH`, `/opt/homebrew/bin`, or `/usr/lo
 
 ## Commands
 
-| Command                       | What it does                                                                                                                                |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Download Video**            | Subtitles, audio and video for a YouTube link, subtitles for a playlist or channel, audio and video from other sites, or a pasted file path |
-| **Transcribe Selected Files** | Transcribes the files or folders selected in Finder                                                                                         |
-| **Queue**                     | Running, queued and finished downloads and transcriptions, with Cancel and results                                                          |
-| **Queue in Menu Bar**         | Shows progress in the menu bar while the queue is running                                                                                   |
+| Command                       | What it does                                                                                                                 |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| **Download Video**            | Subtitles, audio and video for a YouTube video, playlist or channel, audio and video from other sites, or a pasted file path |
+| **Transcribe Selected Files** | Transcribes the files or folders selected in Finder                                                                          |
+| **Queue**                     | Running, queued and finished downloads and transcriptions, with Cancel and results                                           |
+| **Queue in Menu Bar**         | Shows progress in the menu bar while the queue is running                                                                    |
 
 ## How to use it
 
@@ -90,7 +90,9 @@ Press ⌘K, choose **Edit Favorite Languages**, and enter names or codes separat
 
 ### Playlists and channels
 
-Paste a playlist or channel link into **Download Video**. The list shows **Download Subtitles for N Videos** and every video in it; press ↵ on a video to open it on its own.
+Paste a playlist or channel link into **Download Video**. The list shows **Download Subtitles for N Videos**, **Download MP3**, **M4A** and **MP4 for N Videos**, and every video in it; press ↵ on a video to open it on its own.
+
+Press ↵ on **Download MP3 for N Videos**, or M4A or MP4, to add the whole playlist to the queue. Every video is saved as its own file in a folder named after the playlist or channel, inside your download folder. For more than 20 videos, the extension asks first. Videos that can't be downloaded, such as members-only videos or streams that haven't ended, are skipped and listed in the queue. Videos that already have a file in that format in the folder are not downloaded again.
 
 Press ↵ on **Download Subtitles for N Videos** and choose:
 

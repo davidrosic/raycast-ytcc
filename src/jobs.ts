@@ -14,7 +14,12 @@ import {
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import { MediaFormat, Settings, VideoRef, downloadMedia } from "./core";
-import { PlaylistDownload, downloadPlaylistSubtitles } from "./playlists";
+import {
+  PlaylistDownload,
+  PlaylistMediaDownload,
+  downloadPlaylistMedia,
+  downloadPlaylistSubtitles,
+} from "./playlists";
 import {
   TranscriptionOptions,
   transcribeFile,
@@ -29,6 +34,7 @@ export type JobSpec =
       options: TranscriptionOptions;
     }
   | ({ kind: "playlist" } & PlaylistDownload)
+  | ({ kind: "playlist-media" } & PlaylistMediaDownload)
   | { kind: "media"; video: VideoRef; format: MediaFormat };
 
 export type JobStatus = "queued" | "running" | "done" | "failed" | "canceled";
@@ -45,14 +51,19 @@ export type Job = {
   progress?: string;
   percent?: number;
   outputs?: string[];
-  /** Playlist videos without a matching caption, or that failed. */
+  /** Playlist videos that were skipped or failed, and why. */
   skipped?: { title: string; reason: string }[];
-  /** The folder a playlist's subtitles are saved in. */
+  /** The folder a playlist's downloads are saved in. */
   folder?: string;
   error?: string;
   /** The process running the job. */
   worker?: number;
 };
+
+/** A download of every video in a playlist or channel. */
+export function isPlaylist(job: Job): boolean {
+  return job.spec.kind === "playlist" || job.spec.kind === "playlist-media";
+}
 
 export function isActive(job: Job): boolean {
   return job.status === "queued" || job.status === "running";
@@ -301,6 +312,7 @@ function lane(job: Job): keyof typeof laneLimits {
     case "video":
       return "whisper";
     case "playlist":
+    case "playlist-media":
       return "playlist";
     default:
       return "download";
@@ -343,6 +355,8 @@ async function perform(
         onProgress,
         signal,
       );
+    case "playlist-media":
+      return await downloadPlaylistMedia(spec, settings, onProgress, signal);
     case "media":
       return {
         outputs: await downloadMedia(
@@ -478,12 +492,15 @@ export function queueSummary(jobs: Job[]): string | undefined {
     else if (failed) parts.push(`${count(failed, noun)} failed`);
   }
   for (const job of jobs) {
-    if (job.spec.kind !== "playlist" || job.status === "canceled") continue;
+    if (!isPlaylist(job) || job.status === "canceled") continue;
     const saved = job.outputs?.length ?? 0;
+    const total = saved + (job.skipped?.length ?? 0);
     parts.push(
       job.status === "failed" && !saved
         ? `${job.title}: ${job.error}`
-        : `${job.title}: subtitles for ${saved} of ${saved + (job.skipped?.length ?? 0)} videos saved`,
+        : job.spec.kind === "playlist-media"
+          ? `${job.title}: ${saved} of ${total} videos saved as ${job.spec.format.toUpperCase()}`
+          : `${job.title}: subtitles for ${saved} of ${total} videos saved`,
     );
   }
   return parts.length ? parts.join("\n") : undefined;

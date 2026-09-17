@@ -8,6 +8,7 @@ import {
   Keyboard,
   List,
   Toast,
+  confirmAlert,
   openExtensionPreferences,
   showInFinder,
   showToast,
@@ -40,6 +41,7 @@ import {
   youtubeThumbnail,
 } from "./core";
 import { PlaylistSubtitlesForm, usePlaylist } from "./playlist-form";
+import { playlistFolderName } from "./playlists";
 import { cancelJob, isActive } from "./jobs";
 import {
   QueueList,
@@ -59,6 +61,7 @@ import {
   useWhisperModels,
 } from "./transcription";
 import {
+  Fact,
   detailMarkdown,
   errorMessage,
   mediaFormats,
@@ -295,11 +298,17 @@ export default function Command() {
         job.spec.video.id === video?.id &&
         job.spec.format === format,
     );
+  const playlistMediaJob = (format: MediaFormat) =>
+    queue.jobs.find(
+      (job) =>
+        isActive(job) &&
+        job.spec.kind === "playlist-media" &&
+        job.spec.playlist.url === collectionUrl &&
+        job.spec.format === format,
+    );
   const cancelAction = (job: (typeof queue.jobs)[number]) => (
     <Action
-      title={
-        job.spec.kind === "media" ? "Cancel Download" : "Cancel Transcription"
-      }
+      title={savesTranscripts(job) ? "Cancel Transcription" : "Cancel Download"}
       icon={Icon.XMarkCircle}
       style={Action.Style.Destructive}
       onAction={() => {
@@ -311,6 +320,58 @@ export default function Command() {
   const link = filePath ? { isLink: false } : typedLink(query);
   const listUrl =
     url && !collectionUrl && !filePath ? youtubePlaylistOf(query) : undefined;
+
+  const videoCount = playlist
+    ? `${playlist.entries.length} ${playlist.entries.length === 1 ? "Video" : "Videos"}`
+    : "";
+
+  function playlistDetail(note: string, facts: Fact[] = []) {
+    return (
+      <List.Item.Detail
+        markdown={detailMarkdown({
+          image: playlist?.thumbnail,
+          title: playlist?.title,
+          note,
+          facts: [
+            ...(playlist?.channel
+              ? [{ title: "Channel", text: playlist.channel }]
+              : []),
+            { title: "Videos", text: String(playlist?.entries.length ?? 0) },
+            ...facts,
+          ],
+        })}
+      />
+    );
+  }
+
+  /** Queues every video in the playlist as MP3, M4A or MP4, asking first for large ones. */
+  async function playlistMedia(format: MediaFormat) {
+    if (!playlist || !collectionUrl) return;
+    const count = playlist.entries.length;
+    if (
+      count > 20 &&
+      !(await confirmAlert({
+        title: `Download ${count} videos as ${format.toUpperCase()}?`,
+        message: `They're saved in a folder named “${playlistFolderName(playlist.title)}” in your download folder. This can take a long time${format === "mp4" ? " and use a lot of disk space" : ""}.`,
+        primaryAction: { title: "Download" },
+      }))
+    )
+      return;
+    addToQueue(
+      settings,
+      [
+        {
+          title: playlist.title,
+          spec: {
+            kind: "playlist-media",
+            playlist: { title: playlist.title, url: collectionUrl },
+            format,
+          },
+        },
+      ],
+      showQueue,
+    );
+  }
 
   function playlistForm(target: string, title?: string, count?: number) {
     return (
@@ -681,27 +742,12 @@ export default function Command() {
               }
             >
               <List.Item
-                title={`Download Subtitles for ${playlist.entries.length} ${playlist.entries.length === 1 ? "Video" : "Videos"}`}
+                title={`Download Subtitles for ${videoCount}`}
                 subtitle={playlist.title}
                 icon={Icon.Download}
-                detail={
-                  <List.Item.Detail
-                    markdown={detailMarkdown({
-                      image: playlist.thumbnail,
-                      title: playlist.title,
-                      note: "Press ↵ to choose the language and format. One file per video is saved in a folder named after the playlist.",
-                      facts: [
-                        ...(playlist.channel
-                          ? [{ title: "Channel", text: playlist.channel }]
-                          : []),
-                        {
-                          title: "Videos",
-                          text: String(playlist.entries.length),
-                        },
-                      ],
-                    })}
-                  />
-                }
+                detail={playlistDetail(
+                  "Press ↵ to choose the language and format. One file per video is saved in a folder named after the playlist.",
+                )}
                 actions={
                   <ActionPanel>
                     <Action.Push
@@ -718,6 +764,38 @@ export default function Command() {
                   </ActionPanel>
                 }
               />
+              {mediaItems.map(({ value, subtitle }) => {
+                const job = playlistMediaJob(value);
+                return (
+                  <List.Item
+                    key={value}
+                    title={`Download ${value.toUpperCase()} for ${videoCount}`}
+                    subtitle={job ? jobSubtitle(job) : subtitle}
+                    icon={value === "mp4" ? Icon.Video : Icon.Music}
+                    accessories={
+                      job?.percent !== undefined
+                        ? [{ tag: `${job.percent}%` }]
+                        : undefined
+                    }
+                    detail={playlistDetail(
+                      `Press ↵ to add the download to the queue. Every video is saved as ${value.toUpperCase()} in a folder named after the playlist, and videos already in that folder are skipped.`,
+                      [{ title: "Quality", text: subtitle }],
+                    )}
+                    actions={
+                      <ActionPanel>
+                        {job && cancelAction(job)}
+                        <Action
+                          title={`Download ${value.toUpperCase()} for ${videoCount}`}
+                          icon={Icon.Download}
+                          onAction={() => playlistMedia(value)}
+                        />
+                        <Action.OpenInBrowser url={collectionUrl} />
+                        {moreActions}
+                      </ActionPanel>
+                    }
+                  />
+                );
+              })}
             </List.Section>
             <List.Section
               title="Videos"

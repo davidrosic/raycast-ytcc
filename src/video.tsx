@@ -102,7 +102,7 @@ function escapeMarkdown(text: string): string {
   return text.replace(/[\\`*_[\]<>~#]/g, "\\$&");
 }
 
-type Fact = { title: string; text: string };
+export type Fact = { title: string; text: string };
 
 /** Detail markdown: an optional image and title first, with facts listed well below them. */
 export function detailMarkdown({

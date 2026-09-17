@@ -685,3 +685,48 @@ test("counts the videos in a multi-video post", () => {
     "Downloading 2 of 3…",
   );
 });
+
+test("downloads playlists as audio or video and skips what is saved", () => {
+  const playlist = core.parsePlaylist(
+    {
+      id: "PL1",
+      title: "Talks",
+      entries: [
+        { id: "aaaaaaaaaaa", title: "One" },
+        { id: "bbbbbbbbbbb", title: "Live", live_status: "is_live" },
+        { id: "ccccccccccc", title: "Soon", live_status: "is_upcoming" },
+        { id: "ddddddddddd", title: "Was live", live_status: "was_live" },
+      ],
+    },
+    "https://www.youtube.com/playlist?list=PL1",
+  );
+  assert.deepEqual(
+    playlist.entries.map((entry) => entry.live),
+    [undefined, true, true, undefined],
+  );
+  const files = [
+    "One [aaaaaaaaaaa].mp3",
+    "One [aaaaaaaaaaa] - whisper-English.txt",
+    "Other [ddddddddddd].mp4",
+  ];
+  assert.deepEqual(
+    core.alreadyDownloaded(files, { id: "aaaaaaaaaaa" }, "mp3"),
+    ["One [aaaaaaaaaaa].mp3"],
+  );
+  assert.deepEqual(
+    core.alreadyDownloaded(files, { id: "aaaaaaaaaaa" }, "m4a"),
+    [],
+  );
+  assert.equal(
+    core.queueSummary([
+      {
+        title: "Talks",
+        status: "done",
+        outputs: ["a", "b"],
+        skipped: [{}],
+        spec: { kind: "playlist-media", format: "mp3" },
+      },
+    ]),
+    "Talks: 2 of 3 videos saved as MP3",
+  );
+});

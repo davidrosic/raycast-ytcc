@@ -24,6 +24,7 @@ import {
   cancelJob,
   enqueue,
   isActive,
+  isPlaylist,
   queueFolder,
   readJobs,
   removeJob,
@@ -49,6 +50,7 @@ export function jobNoun(spec: JobSpec): string {
     case "playlist":
       return "subtitle download";
     case "media":
+    case "playlist-media":
       return `${spec.format.toUpperCase()} download`;
   }
 }
@@ -181,6 +183,8 @@ export function jobSubtitle(job: Job): string {
         : "";
       if (job.spec.kind === "playlist")
         return `${saved} ${saved === 1 ? "subtitle" : "subtitles"} saved${skipped}`;
+      if (job.spec.kind === "playlist-media")
+        return `${saved} ${job.spec.format.toUpperCase()} ${saved === 1 ? "file" : "files"} saved${skipped}`;
       if (saved === 1 && !skipped && job.outputs)
         return basename(job.outputs[0]);
       return `${saved} ${saved === 1 ? "file" : "files"} saved${skipped}`;
@@ -199,6 +203,8 @@ function doneTitle(job: Job): string {
   switch (job.spec.kind) {
     case "playlist":
       return `Subtitles saved for ${job.title}`;
+    case "playlist-media":
+      return `${job.spec.format.toUpperCase()} saved for ${job.title}`;
     case "media": {
       const format = job.spec.format.toUpperCase();
       return count > 1 ? `${count} ${format} files saved` : `${format} saved`;
@@ -243,7 +249,7 @@ export function jobToast(job: Job, showQueue?: () => void) {
       ? {
           style: Toast.Style.Success,
           title: doneTitle(job),
-          message: job.spec.kind === "playlist" ? jobSubtitle(job) : output,
+          message: isPlaylist(job) ? jobSubtitle(job) : output,
           primaryAction: !output
             ? undefined
             : savesTranscripts(job)
@@ -317,7 +323,7 @@ export function QueueList({
   );
 
   const item = (job: Job) => {
-    const outputs = job.spec.kind === "playlist" ? [] : (job.outputs ?? []);
+    const outputs = isPlaylist(job) ? [] : (job.outputs ?? []);
     const output = outputs[0];
     const savedFolder = job.folder;
     const source = job.spec.kind === "file" ? job.spec.path : undefined;
@@ -399,7 +405,7 @@ export function QueueList({
                       .join("\n")}
                   />
                 )}
-                {(job.status !== "done" || job.spec.kind === "playlist") && (
+                {(job.status !== "done" || isPlaylist(job)) && (
                   <Action
                     title={
                       job.status === "done"
