@@ -494,6 +494,9 @@ export async function transcribeVideo(
         settings,
         [
           "--no-playlist",
+          // Posts with several videos transcribe the first one.
+          "--playlist-items",
+          "1",
           "--newline",
           "-f",
           "bestaudio/best",

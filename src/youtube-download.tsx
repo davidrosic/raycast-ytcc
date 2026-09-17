@@ -119,8 +119,8 @@ export default function Command() {
     work: (
       signal: AbortSignal,
       onProgress: (message: string) => void,
-    ) => Promise<string>,
-    saved: string,
+    ) => Promise<string | string[]>,
+    saved: (count: number) => string,
   ) {
     const controller = new AbortController();
     downloads.current.add(controller);
@@ -134,14 +134,17 @@ export default function Command() {
       },
     });
     try {
-      const path = await work(controller.signal, (message) => {
-        toast.title = message;
-        setProgress(message);
-      });
+      const paths = [
+        await work(controller.signal, (message) => {
+          toast.title = message;
+          setProgress(message);
+        }),
+      ].flat();
+      const path = paths[0];
       setLastFile(path);
       toast.style = Toast.Style.Success;
-      toast.title = saved;
-      toast.message = path;
+      toast.title = saved(paths.length);
+      toast.message = paths.join("\n");
       toast.primaryAction = {
         title: "Show in Finder",
         onAction: () => showInFinder(path),
@@ -172,7 +175,7 @@ export default function Command() {
       `Downloading ${caption.language} ${formatTitle(format)}…`,
       (signal, onProgress) =>
         downloadCaption(video, caption, format, settings, onProgress, signal),
-      "Subtitle saved",
+      () => "Subtitle saved",
     );
   }
 
@@ -183,7 +186,10 @@ export default function Command() {
       `Downloading ${format.toUpperCase()}…`,
       (signal, onProgress) =>
         downloadMedia(video, format, settings, onProgress, signal),
-      `${format.toUpperCase()} saved`,
+      (count) =>
+        count > 1
+          ? `${count} ${format.toUpperCase()} files saved`
+          : `${format.toUpperCase()} saved`,
     );
   }
 
@@ -865,11 +871,26 @@ export default function Command() {
             <List.Item
               key={value}
               title={`Download ${value.toUpperCase()}`}
-              subtitle={(activeMedia === value && progress) || subtitle}
+              subtitle={
+                (activeMedia === value && progress) ||
+                (video.isLive
+                  ? "Live stream, available after it ends"
+                  : video.items
+                    ? `${subtitle} · ${video.items} videos`
+                    : subtitle)
+              }
               icon={value === "mp4" ? Icon.Video : Icon.Music}
               detail={videoDetail(state, [
                 { title: "Format", text: value.toUpperCase() },
                 { title: "Quality", text: subtitle },
+                ...(video.items
+                  ? [
+                      {
+                        title: "Videos",
+                        text: `${video.items}, each saved as its own file`,
+                      },
+                    ]
+                  : []),
               ])}
               actions={
                 <ActionPanel>

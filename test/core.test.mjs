@@ -612,3 +612,28 @@ test("recognizes links from other video sites", () => {
     undefined,
   );
 });
+
+test("counts the videos in a multi-video post", () => {
+  const post = core.parseVideo(
+    {
+      _type: "playlist",
+      id: "1395079556562706435",
+      title: "Mr. Chau - Here it is",
+      entries: [
+        { id: "a", thumbnail: "https://pbs.twimg.com/a.jpg" },
+        { id: "b" },
+      ],
+    },
+    "https://x.com/a/status/1395079556562706435",
+  );
+  assert.equal(post.items, 2);
+  assert.equal(post.thumbnail, "https://pbs.twimg.com/a.jpg");
+  assert.equal(
+    core.parseVideo({ id: "x", title: "t", is_live: true }, "u").isLive,
+    true,
+  );
+  assert.equal(
+    core.mediaProgress("[download] Downloading item 2 of 3", "mp4"),
+    "Downloading 2 of 3…",
+  );
+});

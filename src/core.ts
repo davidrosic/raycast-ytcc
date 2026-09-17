@@ -31,6 +31,9 @@ export type Video = {
   channel?: string;
   duration?: number;
   uploadDate?: string;
+  /** How many videos a post has, when it has several, such as an Instagram carousel. */
+  items?: number;
+  isLive?: boolean;
 };
 export type VideoPreview = {
   title?: string;
@@ -665,7 +668,13 @@ export function parseVideo(data: unknown, url: string): Video {
   );
   const text = (value: unknown) =>
     typeof value === "string" && value.trim() ? value.trim() : undefined;
-  const thumbnail = text(info.thumbnail);
+  const entries = Array.isArray(info.entries)
+    ? (info.entries as unknown[]).filter(
+        (entry): entry is Record<string, unknown> =>
+          Boolean(entry) && typeof entry === "object",
+      )
+    : [];
+  const thumbnail = text(info.thumbnail) ?? text(entries[0]?.thumbnail);
   const uploadDate = text(info.upload_date);
   return {
     id: info.id,
@@ -683,6 +692,8 @@ export function parseVideo(data: unknown, url: string): Video {
       uploadDate && /^\d{8}$/.test(uploadDate)
         ? `${uploadDate.slice(0, 4)}-${uploadDate.slice(4, 6)}-${uploadDate.slice(6)}`
         : undefined,
+    items: entries.length > 1 ? entries.length : undefined,
+    isLive: info.is_live === true || info.live_status === "is_live",
   };
 }
 
@@ -1219,6 +1230,8 @@ export function mediaProgress(
   format: MediaFormat,
 ): string | undefined {
   const name = format.toUpperCase();
+  const item = /^\[download\] Downloading item (\d+) of (\d+)/.exec(line);
+  if (item) return `Downloading ${item[1]} of ${item[2]}…`;
   const percent = /^\[download\]\s+([\d.]+)%/.exec(line);
   if (percent) return `Downloading ${name}… ${Math.floor(Number(percent[1]))}%`;
   if (/^\[Merger\]/.test(line)) return "Merging audio and video…";
@@ -1227,19 +1240,28 @@ export function mediaProgress(
   return undefined;
 }
 
+/**
+ * Downloads a video's audio or video and returns the saved files: one file,
+ * or one per video for posts with several, such as X posts and Instagram
+ * carousels.
+ */
 export async function downloadMedia(
   video: Video,
   format: MediaFormat,
   settings: Settings,
   onProgress?: (message: string) => void,
   signal?: AbortSignal,
-): Promise<string> {
+): Promise<string[]> {
+  if (video.isLive)
+    throw new Error(
+      "This is a live stream. It can be downloaded after the stream ends.",
+    );
   // MP3, M4A and MP4 all need ffmpeg; fail early with a clear message.
   await executable(settings.ffmpegPath, "ffmpeg");
   const destination = await outputDirectory(settings);
   const temporary = await mkdtemp(join(tmpdir(), "raycast-media-"));
   try {
-    const output = join(temporary, "media.%(ext)s");
+    const output = join(temporary, "%(playlist_index|0)s-%(id)s.%(ext)s");
     const args = ["--no-playlist", "--newline", "-o", output];
     if (format === "mp4") {
       args.push(
@@ -1260,29 +1282,58 @@ export async function downloadMedia(
       );
       if (format === "mp3") args.push("--audio-quality", "0");
     }
+    // A photo in a carousel shouldn't stop the videos around it.
+    if (video.items) args.push("--ignore-errors");
     args.push(video.url);
     onProgress?.(`Downloading ${format.toUpperCase()}…`);
-    await runYtDlp(
-      settings,
-      args,
-      (line) => {
-        const message = mediaProgress(line, format);
-        if (message) onProgress?.(message);
-      },
-      signal,
-    );
-    const file = (await readdir(temporary)).find((name) =>
-      name.endsWith(`.${format}`),
-    );
-    if (!file)
-      throw new Error(`yt-dlp did not produce a ${format.toUpperCase()} file.`);
-    const target = await uniquePath(
-      destination,
-      `${safeName(video.title)} [${video.id}]`,
-      format,
-    );
-    await copyFile(join(temporary, file), target, constants.COPYFILE_EXCL);
-    return target;
+    let item = "";
+    let failure: unknown;
+    try {
+      await runYtDlp(
+        settings,
+        args,
+        (line) => {
+          const message = mediaProgress(line, format);
+          if (!message) return;
+          if (/^Downloading \d+ of \d+…$/.test(message))
+            item = `${message.slice(12, -1)} · `;
+          onProgress?.(
+            /^Downloading \d+ of/.test(message) ? message : `${item}${message}`,
+          );
+        },
+        signal,
+      );
+    } catch (error) {
+      if (isCanceled(error)) throw error;
+      failure = error;
+    }
+    const files = (await readdir(temporary))
+      .filter((name) => name.endsWith(`.${format}`))
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    if (!files.length) {
+      if (
+        format !== "mp4" &&
+        failure instanceof Error &&
+        /audio codec|Requested format is not available/i.test(failure.message)
+      )
+        throw new Error("This video has no audio.");
+      throw (
+        failure ??
+        new Error(`yt-dlp did not produce a ${format.toUpperCase()} file.`)
+      );
+    }
+    const stem = `${safeName(video.title)} [${video.id}]`;
+    const targets: string[] = [];
+    for (const [index, file] of files.entries()) {
+      const target = await uniquePath(
+        destination,
+        files.length > 1 ? `${stem} ${index + 1}` : stem,
+        format,
+      );
+      await copyFile(join(temporary, file), target, constants.COPYFILE_EXCL);
+      targets.push(target);
+    }
+    return targets;
   } finally {
     await rm(temporary, { recursive: true, force: true });
   }
