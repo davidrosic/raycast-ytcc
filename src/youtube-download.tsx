@@ -99,7 +99,8 @@ export default function Command() {
   const playlistState = usePlaylist(collectionUrl, settings);
   const { playlist } = playlistState;
   const { video, preview, error } = state;
-  const [busy, setBusy] = useState(false);
+  const [downloadCount, setDownloadCount] = useState(0);
+  const busy = downloadCount > 0;
   const [progress, setProgress] = useState("");
   const [activeMedia, setActiveMedia] = useState<MediaFormat>();
   const [lastFile, setLastFile] = useState<string>();
@@ -110,9 +111,9 @@ export default function Command() {
   });
   const [selectedFormat, setSelectedFormat] = useState<ExportFormat>("raw");
   const ytDlp = useYtDlpUpdate(settings);
-  const download = useRef<AbortController | undefined>(undefined);
+  const downloads = useRef(new Set<AbortController>());
 
-  /** Runs one download at a time with a toast that can cancel it. */
+  /** Runs a download with a toast that can cancel it. */
   async function withDownload(
     title: string,
     work: (
@@ -121,10 +122,9 @@ export default function Command() {
     ) => Promise<string>,
     saved: string,
   ) {
-    download.current?.abort();
     const controller = new AbortController();
-    download.current = controller;
-    setBusy(true);
+    downloads.current.add(controller);
+    setDownloadCount(downloads.current.size);
     const toast = await showToast({
       style: Toast.Style.Animated,
       title,
@@ -157,9 +157,9 @@ export default function Command() {
         toast.message = errorMessage(error);
       }
     } finally {
-      if (download.current === controller) {
-        download.current = undefined;
-        setBusy(false);
+      downloads.current.delete(controller);
+      setDownloadCount(downloads.current.size);
+      if (!downloads.current.size) {
         setActiveMedia(undefined);
         setProgress("");
       }
@@ -335,10 +335,12 @@ export default function Command() {
     <ActionPanel.Section>
       {busy && (
         <Action
-          title="Cancel Download"
+          title={downloadCount > 1 ? "Cancel Downloads" : "Cancel Download"}
           icon={Icon.XMarkCircle}
           style={Action.Style.Destructive}
-          onAction={() => download.current?.abort()}
+          onAction={() =>
+            downloads.current.forEach((controller) => controller.abort())
+          }
         />
       )}
       {lastFile && (
