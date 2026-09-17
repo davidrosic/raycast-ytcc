@@ -1,13 +1,4 @@
-import {
-  Action,
-  ActionPanel,
-  Form,
-  Icon,
-  LocalStorage,
-  Toast,
-  showInFinder,
-  showToast,
-} from "@raycast/api";
+import { Action, ActionPanel, Form, Icon, LocalStorage } from "@raycast/api";
 import { basename } from "node:path";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -24,10 +15,8 @@ import {
   WhisperModel,
   canTranslate,
   modelName,
-  transcribeFile,
   whisperModels,
 } from "./whisper";
-import { errorMessage } from "./video";
 
 export const captionFormats: { value: ExportFormat; title: string }[] = [
   { value: "raw", title: "RAW · TXT (all cues)" },
@@ -86,76 +75,25 @@ export function useWhisperModels(settings: Settings) {
 }
 
 /**
- * Transcribes files one after another, keeping a single toast up to date.
- * Returns the saved files; a failed file does not stop the rest.
+ * Files, spoken language, output format and model; ⌘↵ submits. For a YouTube
+ * video, pass `videoTitle` instead of files.
  */
-export async function transcribeWithToast(
-  paths: string[],
-  options: TranscriptionOptions,
-  settings: Settings,
-  onProgress?: (path: string, message: string) => void,
-): Promise<string[]> {
-  const toast = await showToast({
-    style: Toast.Style.Animated,
-    title:
-      paths.length > 1
-        ? `Transcribing ${paths.length} files…`
-        : `Transcribing ${basename(paths[0])}…`,
-  });
-  const outputs: string[] = [];
-  const failures: string[] = [];
-  for (const [index, path] of paths.entries()) {
-    const prefix = paths.length > 1 ? `${index + 1} of ${paths.length} · ` : "";
-    onProgress?.(path, "Preparing transcription…");
-    try {
-      outputs.push(
-        await transcribeFile(path, options, settings, (message) => {
-          toast.title = `${prefix}${message}`;
-          onProgress?.(path, message);
-        }),
-      );
-    } catch (error) {
-      failures.push(`${basename(path)}: ${errorMessage(error)}`);
-    }
-  }
-  if (failures.length) {
-    toast.style = Toast.Style.Failure;
-    toast.title = outputs.length
-      ? `${outputs.length} of ${paths.length} transcriptions saved`
-      : "Transcription failed";
-    toast.message = failures.join("\n");
-  } else {
-    toast.style = Toast.Style.Success;
-    toast.title =
-      outputs.length > 1
-        ? `${outputs.length} transcriptions saved`
-        : "Transcription saved";
-    toast.message = outputs.join("\n");
-  }
-  const last = outputs[outputs.length - 1];
-  if (last)
-    toast.primaryAction = {
-      title: "Show in Finder",
-      onAction: () => showInFinder(last),
-    };
-  return outputs;
-}
-
-/** Files, spoken language, output format and model; ⌘↵ submits. */
 export function TranscribeForm({
-  initialPaths,
+  initialPaths = [],
+  videoTitle,
   settings,
   favoriteLanguages,
   defaultLanguage,
-  isLoading,
+  defaultFormat = "raw",
   note,
   onTranscribe,
 }: {
-  initialPaths: string[];
+  initialPaths?: string[];
+  videoTitle?: string;
   settings: Settings;
   favoriteLanguages: string;
   defaultLanguage: string;
-  isLoading?: boolean;
+  defaultFormat?: ExportFormat;
   note?: string;
   onTranscribe: (paths: string[], options: TranscriptionOptions) => void;
 }) {
@@ -189,9 +127,12 @@ export function TranscribeForm({
 
   return (
     <Form
-      isLoading={isLoading}
       navigationTitle={
-        files.length === 1 ? `Transcribe ${basename(files[0])}` : "Transcribe"
+        videoTitle
+          ? `Transcribe ${videoTitle}`
+          : files.length === 1
+            ? `Transcribe ${basename(files[0])}`
+            : "Transcribe"
       }
       actions={
         <ActionPanel>
@@ -204,8 +145,7 @@ export function TranscribeForm({
               model?: string;
               translate: boolean;
             }) => {
-              if (isLoading) return;
-              if (!files.length) {
+              if (!videoTitle && !files.length) {
                 setFilesError(
                   "Choose audio or video files, or a folder that contains some",
                 );
@@ -238,20 +178,24 @@ export function TranscribeForm({
       }
     >
       {note && <Form.Description text={note} />}
-      <Form.FilePicker
-        id="files"
-        title="Files"
-        value={paths}
-        onChange={(value) => {
-          setPaths(value);
-          setFilesError(undefined);
-        }}
-        canChooseDirectories
-        allowMultipleSelection
-        error={filesError}
-        info="Folders are searched, including subfolders, for audio and video files."
-      />
-      {files.length !== paths.length && (
+      {videoTitle ? (
+        <Form.Description title="Video" text={videoTitle} />
+      ) : (
+        <Form.FilePicker
+          id="files"
+          title="Files"
+          value={paths}
+          onChange={(value) => {
+            setPaths(value);
+            setFilesError(undefined);
+          }}
+          canChooseDirectories
+          allowMultipleSelection
+          error={filesError}
+          info="Folders are searched, including subfolders, for audio and video files."
+        />
+      )}
+      {!videoTitle && files.length !== paths.length && (
         <Form.Description
           text={
             files.length === 1
@@ -288,7 +232,7 @@ export function TranscribeForm({
             .map(languageItem)}
         </Form.Dropdown.Section>
       </Form.Dropdown>
-      <Form.Dropdown id="format" title="Output" defaultValue="raw">
+      <Form.Dropdown id="format" title="Output" defaultValue={defaultFormat}>
         {captionFormats.map((format) => (
           <Form.Dropdown.Item
             key={format.value}
@@ -332,7 +276,13 @@ export function TranscribeForm({
         onChange={() => setTranslateError(undefined)}
         info="Whisper writes the English translation instead of the spoken language. Turbo models can't translate; use large-v3 or medium."
       />
-      <Form.Description text="⌘↵ converts the audio to 16 kHz WAV with ffmpeg and transcribes it with whisper.cpp. Each result is saved next to its file." />
+      <Form.Description
+        text={
+          videoTitle
+            ? "⌘↵ adds the video to the transcription queue. Its audio is downloaded and transcribed with whisper.cpp, and the result is saved to the download folder. The queue keeps running when you close Raycast."
+            : "⌘↵ adds the files to the transcription queue. Each result is saved next to its file. The queue keeps running when you close Raycast."
+        }
+      />
     </Form>
   );
 }

@@ -2,17 +2,16 @@ import { Form, getSelectedFinderItems } from "@raycast/api";
 import { useEffect, useState } from "react";
 import { defaultWhisperLanguage, localFileInfo } from "./core";
 import { preferences } from "./preferences";
-import {
-  TranscribeForm,
-  transcribeWithToast,
-  useFavoriteLanguages,
-} from "./transcription";
+import { QueueList, addToQueue, fileJobs } from "./queue";
+import { TranscribeForm, useFavoriteLanguages } from "./transcription";
+
+export { runQueueWorker } from "./jobs";
 
 export default function Command() {
   const settings = preferences();
   const favoriteLanguages = useFavoriteLanguages(settings);
   const [selection, setSelection] = useState<string[]>();
-  const [running, setRunning] = useState(false);
+  const [queued, setQueued] = useState(false);
 
   useEffect(() => {
     getSelectedFinderItems().then(
@@ -26,6 +25,7 @@ export default function Command() {
     );
   }, []);
 
+  if (queued) return <QueueList settings={settings} />;
   if (!selection || !favoriteLanguages.loaded) return <Form isLoading />;
 
   return (
@@ -37,19 +37,14 @@ export default function Command() {
         favoriteLanguages.value,
         settings.whisperLanguage,
       )}
-      isLoading={running}
       note={
         selection.length
           ? undefined
           : "Nothing is selected in Finder. Choose files or folders below, or select them in Finder before opening this command."
       }
       onTranscribe={async (paths, options) => {
-        setRunning(true);
-        try {
-          await transcribeWithToast(paths, options, settings);
-        } finally {
-          setRunning(false);
-        }
+        await addToQueue(settings, fileJobs(paths, options));
+        setQueued(true);
       }}
     />
   );

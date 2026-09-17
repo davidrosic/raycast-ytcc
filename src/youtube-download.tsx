@@ -32,11 +32,19 @@ import {
   whisperLanguageName,
   youtubeThumbnail,
 } from "./core";
+import { cancelJob, isActive } from "./jobs";
+import {
+  QueueList,
+  addToQueue,
+  fileJobs,
+  jobSubtitle,
+  jobToast,
+  useQueue,
+} from "./queue";
 import {
   TranscribeForm,
   captionFormats,
   formatTitle,
-  transcribeWithToast,
   useFavoriteLanguages,
   useWhisperModels,
 } from "./transcription";
@@ -48,7 +56,9 @@ import {
   useVideo,
   videoDetail,
 } from "./video";
-import { TranscriptionOptions, modelName, transcribe } from "./whisper";
+import { TranscriptionOptions, modelName } from "./whisper";
+
+export { runQueueWorker } from "./jobs";
 
 /** The video URL for search text that is a link, or undefined for filter text and unfinished links. */
 function typedLink(text: string): { isLink: boolean; url?: string } {
@@ -70,7 +80,7 @@ export default function Command() {
     (link) => setUrl(mediaUrl(link)),
     (text) => {
       const path = localPath(text);
-      if (path && localFileInfo(path)?.isFile) push(transcribeForm(path));
+      if (path && localFileInfo(path)) push(transcribeForm(path));
     },
   );
   const state = useVideo(url, settings, inspectMedia);
@@ -78,8 +88,12 @@ export default function Command() {
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState("");
   const [activeMedia, setActiveMedia] = useState<MediaFormat>();
-  const [activeFile, setActiveFile] = useState<string>();
   const [lastFile, setLastFile] = useState<string>();
+  const showQueue = () => push(<QueueList settings={settings} />);
+  const queue = useQueue(settings, (job) => {
+    if (job.outputs?.length) setLastFile(job.outputs[0]);
+    jobToast(job, showQueue);
+  });
   const [selectedFormat, setSelectedFormat] = useState<ExportFormat>("raw");
 
   async function save(caption: Caption, format: ExportFormat) {
@@ -116,36 +130,6 @@ export default function Command() {
     }
   }
 
-  async function whisper() {
-    if (!video) return;
-    setBusy(true);
-    setProgress("Preparing transcription…");
-    const toast = await showToast({
-      style: Toast.Style.Animated,
-      title: "Transcribing video…",
-    });
-    try {
-      const files = await transcribe(video, settings, (message) =>
-        setProgress(message),
-      );
-      setLastFile(files[0]);
-      toast.style = Toast.Style.Success;
-      toast.title = "Transcription saved";
-      toast.message = "SRT, VTT and TXT files are ready";
-      toast.primaryAction = {
-        title: "Show in Finder",
-        onAction: () => showInFinder(files[0]),
-      };
-    } catch (error) {
-      toast.style = Toast.Style.Failure;
-      toast.title = "Transcription failed";
-      toast.message = errorMessage(error);
-    } finally {
-      setBusy(false);
-      setProgress("");
-    }
-  }
-
   async function media(format: MediaFormat) {
     if (!video) return;
     setBusy(true);
@@ -176,27 +160,18 @@ export default function Command() {
     }
   }
 
-  async function transcribeLocal(
-    paths: string[],
-    options: TranscriptionOptions,
-  ) {
-    setBusy(true);
-    try {
-      const outputs = await transcribeWithToast(
-        paths,
-        options,
-        settings,
-        (path, message) => {
-          setActiveFile(path);
-          setProgress(message);
-        },
-      );
-      if (outputs.length) setLastFile(outputs[outputs.length - 1]);
-    } finally {
-      setBusy(false);
-      setActiveFile(undefined);
-      setProgress("");
-    }
+  function queueFiles(paths: string[], options: TranscriptionOptions) {
+    addToQueue(settings, fileJobs(paths, options), showQueue);
+  }
+
+  function queueVideo(options: TranscriptionOptions) {
+    if (!video) return;
+    const { id, title, url } = video;
+    addToQueue(
+      settings,
+      [{ title, spec: { kind: "video", video: { id, title, url }, options } }],
+      showQueue,
+    );
   }
 
   const { defaultModel } = useWhisperModels(settings);
@@ -214,17 +189,59 @@ export default function Command() {
         defaultLanguage={whisperLanguage}
         onTranscribe={(paths, options) => {
           pop();
-          transcribeLocal(paths, options);
+          queueFiles(paths, options);
         }}
       />
     );
   }
+
+  function videoTranscribeForm() {
+    return (
+      <TranscribeForm
+        videoTitle={video?.title}
+        settings={settings}
+        favoriteLanguages={favoriteLanguages.value}
+        defaultLanguage={whisperLanguage}
+        defaultFormat={selectedFormat}
+        onTranscribe={(_, options) => {
+          pop();
+          queueVideo(options);
+        }}
+      />
+    );
+  }
+
+  const whisperTitle =
+    whisperLanguage === "auto"
+      ? "Transcribe with Language Detection"
+      : `Transcribe in ${whisperLanguageName(whisperLanguage)}`;
 
   const query = search.text.trim();
   const filePath = localPath(query);
   const fileInfo = useMemo(
     () => (filePath ? localFileInfo(filePath) : undefined),
     [filePath],
+  );
+  const fileJob = queue.jobs.find(
+    (job) =>
+      isActive(job) && job.spec.kind === "file" && job.spec.path === filePath,
+  );
+  const videoJob = queue.jobs.find(
+    (job) =>
+      isActive(job) &&
+      job.spec.kind === "video" &&
+      job.spec.video.id === video?.id,
+  );
+  const cancelAction = (job: (typeof queue.jobs)[number]) => (
+    <Action
+      title="Cancel Transcription"
+      icon={Icon.XMarkCircle}
+      style={Action.Style.Destructive}
+      onAction={() => {
+        cancelJob(queue.folder, job);
+        queue.refresh();
+      }}
+    />
   );
   const link = filePath ? { isLink: false } : typedLink(query);
   const pendingUrl = link.url !== url ? link.url : undefined;
@@ -267,6 +284,11 @@ export default function Command() {
           onAction={() => showInFinder(lastFile)}
         />
       )}
+      <Action.Push
+        title="Show Transcription Queue"
+        icon={Icon.List}
+        target={<QueueList settings={settings} />}
+      />
       <Action.Push
         title="Edit Favorite Languages"
         icon={Icon.Star}
@@ -398,76 +420,92 @@ export default function Command() {
         />
       )}
       {filePath && (
-        <List.Section title="Transcribe File">
+        <List.Section
+          title={
+            fileInfo?.isFile === false ? "Transcribe Folder" : "Transcribe File"
+          }
+        >
           <List.Item
             title={basename(filePath) || filePath}
             subtitle={
-              (activeFile === filePath && progress) ||
-              (fileInfo?.isFile
-                ? dirname(filePath)
+              fileJob
+                ? jobSubtitle(fileJob)
                 : fileInfo
-                  ? "Not a file"
-                  : "File not found")
+                  ? dirname(filePath)
+                  : "Not found"
             }
-            icon={fileInfo?.isFile ? Icon.Microphone : Icon.Warning}
+            icon={
+              !fileInfo
+                ? Icon.Warning
+                : fileInfo.isFile
+                  ? Icon.Microphone
+                  : Icon.Folder
+            }
             detail={
               <List.Item.Detail
                 markdown={detailMarkdown(
-                  fileInfo?.isFile
+                  fileInfo && !fileInfo.isFile
                     ? {
                         title: basename(filePath),
-                        note: "Press ↵ to choose the spoken language and output, then ⌘↵ to transcribe. Press ⌘↵ here to transcribe with the settings below.",
-                        facts: [
-                          { title: "Folder", text: dirname(filePath) },
-                          { title: "Size", text: formatSize(fileInfo.size) },
-                          {
-                            title: "Modified",
-                            text: fileInfo.modified.toISOString().slice(0, 10),
-                          },
-                          {
-                            title: "Spoken Language",
-                            text: whisperLanguageName(whisperLanguage),
-                          },
-                          { title: "Output", text: formatTitle("raw") },
-                          {
-                            title: "Model",
-                            text: defaultModel
-                              ? modelName(defaultModel)
-                              : "Not found",
-                          },
-                        ],
+                        note: "Press ↵ to choose the spoken language, output and model. Audio and video files in this folder and its subfolders are added to the transcription queue.",
+                        facts: [{ title: "Folder", text: filePath }],
                       }
-                    : {
-                        title: fileInfo ? "Not a file" : "File not found",
-                        note: "Enter the full path of an audio or video file, for example `/Users/you/Music/interview.m4a`.",
-                        facts: [{ title: "Path", text: filePath }],
-                      },
+                    : fileInfo
+                      ? {
+                          title: basename(filePath),
+                          note: "Press ↵ to choose the spoken language and output, then ⌘↵ to transcribe. Press ⌘↵ here to transcribe with the settings below.",
+                          facts: [
+                            { title: "Folder", text: dirname(filePath) },
+                            { title: "Size", text: formatSize(fileInfo.size) },
+                            {
+                              title: "Modified",
+                              text: fileInfo.modified
+                                .toISOString()
+                                .slice(0, 10),
+                            },
+                            {
+                              title: "Spoken Language",
+                              text: whisperLanguageName(whisperLanguage),
+                            },
+                            { title: "Output", text: formatTitle("raw") },
+                            {
+                              title: "Model",
+                              text: defaultModel
+                                ? modelName(defaultModel)
+                                : "Not found",
+                            },
+                          ],
+                        }
+                      : {
+                          title: "Not found",
+                          note: "Enter the full path of an audio or video file or a folder, for example `/Users/you/Music/interview.m4a`.",
+                          facts: [{ title: "Path", text: filePath }],
+                        },
                 )}
               />
             }
             actions={
               <ActionPanel>
-                {fileInfo?.isFile && (
+                {fileJob && cancelAction(fileJob)}
+                {fileInfo && (
                   <>
                     <Action.Push
                       title="Choose Language and Output"
                       icon={Icon.Microphone}
                       target={transcribeForm(filePath)}
                     />
-                    <Action
-                      title={
-                        whisperLanguage === "auto"
-                          ? "Transcribe with Language Detection"
-                          : `Transcribe in ${whisperLanguageName(whisperLanguage)}`
-                      }
-                      icon={Icon.Waveform}
-                      onAction={() =>
-                        transcribeLocal([filePath], {
-                          language: whisperLanguage,
-                          format: "raw",
-                        })
-                      }
-                    />
+                    {fileInfo.isFile && (
+                      <Action
+                        title={whisperTitle}
+                        icon={Icon.Waveform}
+                        onAction={() =>
+                          queueFiles([filePath], {
+                            language: whisperLanguage,
+                            format: "raw",
+                          })
+                        }
+                      />
+                    )}
                     <Action.ShowInFinder path={filePath} />
                   </>
                 )}
@@ -505,8 +543,11 @@ export default function Command() {
             <List.Item
               title="Transcribe with Whisper"
               subtitle={
-                progress ||
-                (defaultModel ? `Local ${modelName(defaultModel)}` : "Local")
+                videoJob
+                  ? jobSubtitle(videoJob)
+                  : defaultModel
+                    ? `Local ${modelName(defaultModel)}`
+                    : "Local"
               }
               icon={Icon.Microphone}
               detail={videoDetail(state, [
@@ -516,16 +557,27 @@ export default function Command() {
                 },
                 {
                   title: "Spoken Language",
-                  text: settings.whisperLanguage?.trim() || "Serbian",
+                  text: whisperLanguageName(whisperLanguage),
                 },
-                { title: "Output", text: "SRT, VTT and TXT" },
+                { title: "Output", text: formatTitle(selectedFormat) },
               ])}
               actions={
                 <ActionPanel>
-                  <Action
-                    title="Transcribe with Whisper"
+                  {videoJob && cancelAction(videoJob)}
+                  <Action.Push
+                    title="Choose Language and Output"
                     icon={Icon.Microphone}
-                    onAction={whisper}
+                    target={videoTranscribeForm()}
+                  />
+                  <Action
+                    title={whisperTitle}
+                    icon={Icon.Waveform}
+                    onAction={() =>
+                      queueVideo({
+                        language: whisperLanguage,
+                        format: selectedFormat,
+                      })
+                    }
                   />
                   {moreActions}
                 </ActionPanel>

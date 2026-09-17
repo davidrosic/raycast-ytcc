@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 import {
   access,
-  copyFile,
   mkdir,
   mkdtemp,
   open,
@@ -25,10 +24,10 @@ import {
   rawCaptionText,
   run,
   safeName,
-  uniqueBase,
   uniquePath,
   vttToText,
   whisperLanguageName,
+  ytDlpOptions,
 } from "./core";
 
 /** Whether a WAV header already describes the 16 kHz mono 16-bit PCM audio whisper.cpp reads. */
@@ -91,6 +90,7 @@ async function vadModel(
   settings: Settings,
   model: string,
   onProgress?: (message: string) => void,
+  signal?: AbortSignal,
 ): Promise<string> {
   if (settings.vadModelPath) {
     if (await readable(settings.vadModelPath)) return settings.vadModelPath;
@@ -108,10 +108,11 @@ async function vadModel(
   onProgress?.("Downloading Silero VAD model…");
   let data: Buffer;
   try {
-    const response = await fetch(sileroModel.url);
+    const response = await fetch(sileroModel.url, { signal });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     data = Buffer.from(await response.arrayBuffer());
   } catch (error) {
+    if (signal?.aborted) throw error;
     throw new Error(
       `Could not download the Silero VAD model (${error instanceof Error ? error.message : String(error)}). Check your connection, or turn off Skip Silence in extension preferences.`,
     );
@@ -231,6 +232,7 @@ async function whisperSetup(
   settings: Settings,
   chosenModel?: string,
   onProgress?: (message: string) => void,
+  signal?: AbortSignal,
 ): Promise<WhisperSetup> {
   const whisper = await executable(settings.whisperPath, "whisper-cli");
   const model = chosenModel || defaultModelPath(settings, whisper);
@@ -246,7 +248,7 @@ async function whisperSetup(
     vad:
       settings.skipSilence === false
         ? undefined
-        : await vadModel(settings, model, onProgress),
+        : await vadModel(settings, model, onProgress, signal),
   };
 }
 
@@ -260,29 +262,35 @@ async function whisperAudio(
   temporary: string,
   settings: Settings,
   onProgress?: (message: string) => void,
+  signal?: AbortSignal,
 ): Promise<string> {
   if (await isWhisperWav(input)) return input;
   const ffmpeg = await executable(settings.ffmpegPath, "ffmpeg");
   const wav = join(temporary, "audio.wav");
   onProgress?.("Converting audio to 16 kHz WAV…");
   try {
-    await run(ffmpeg, [
-      "-nostdin",
-      "-loglevel",
-      "error",
-      "-y",
-      "-i",
-      input,
-      "-map",
-      "0:a:0",
-      "-ac",
-      "1",
-      "-ar",
-      "16000",
-      "-c:a",
-      "pcm_s16le",
-      wav,
-    ]);
+    await run(
+      ffmpeg,
+      [
+        "-nostdin",
+        "-loglevel",
+        "error",
+        "-y",
+        "-i",
+        input,
+        "-map",
+        "0:a:0",
+        "-ac",
+        "1",
+        "-ar",
+        "16000",
+        "-c:a",
+        "pcm_s16le",
+        wav,
+      ],
+      undefined,
+      signal,
+    );
   } catch (error) {
     if (error instanceof Error && /matches no streams/.test(error.message))
       throw new Error("This file has no audio track.");
@@ -295,11 +303,11 @@ async function whisperAudio(
 async function runWhisper(
   { whisper, model, vad }: WhisperSetup,
   wav: string,
-  language: string,
+  { language, translate }: Pick<TranscriptionOptions, "language" | "translate">,
   outputs: string[],
   temporary: string,
   onProgress?: (message: string) => void,
-  translate = false,
+  signal?: AbortSignal,
 ): Promise<string> {
   const result = join(temporary, "result");
   onProgress?.(
@@ -329,6 +337,7 @@ async function runWhisper(
             `${translate ? "Translating" : "Transcribing"}… ${match[1]}%`,
           );
       },
+      signal,
     );
   } catch (error) {
     const coreMl =
@@ -353,11 +362,6 @@ async function runWhisper(
   return result;
 }
 
-/**
- * Transcribes a local audio or video file with whisper.cpp and saves one file
- * in the chosen format next to it, or in the download folder when that folder
- * is not writable.
- */
 export type TranscriptionOptions = {
   /** A whisper.cpp language code, or `auto`. */
   language: string;
@@ -380,42 +384,48 @@ export function transcriptSuffix(language: string, translate?: boolean) {
   return `whisper-${spoken}${translate && language !== "en" ? " to English" : ""}`;
 }
 
-export async function transcribeFile(
-  path: string,
-  { language, format, model, translate }: TranscriptionOptions,
+/**
+ * Transcribes audio with whisper.cpp and saves one file in the chosen format.
+ * `audio` returns the file to read, and may download it into the temporary folder.
+ */
+async function transcribeAudio(
+  audio: (temporary: string) => Promise<string>,
+  destination: () => Promise<{ directory: string; name: string }>,
+  options: TranscriptionOptions,
   settings: Settings,
   onProgress?: (message: string) => void,
+  signal?: AbortSignal,
 ): Promise<string> {
-  if (!localFileInfo(path)?.isFile)
-    throw new Error(`${path} is not a file that can be read.`);
-  const setup = await whisperSetup(settings, model, onProgress);
+  const { language, format, model, translate } = options;
+  const setup = await whisperSetup(settings, model, onProgress, signal);
   if (translate && !canTranslate(setup.model))
     throw new Error(
       `${modelName(setup.model)} can't translate. Choose large-v3 or another model without “turbo” in its name.`,
     );
   const temporary = await mkdtemp(join(tmpdir(), "raycast-whisper-"));
   try {
-    const wav = await whisperAudio(path, temporary, settings, onProgress);
+    const wav = await whisperAudio(
+      await audio(temporary),
+      temporary,
+      settings,
+      onProgress,
+      signal,
+    );
     const source = format === "srt" ? "srt" : "vtt";
     const result = await runWhisper(
       setup,
       wav,
-      language,
+      options,
       [source],
       temporary,
       onProgress,
-      translate,
+      signal,
     );
     const output = await readFile(`${result}.${source}`, "utf8");
-    let destination = dirname(path);
-    try {
-      await access(destination, constants.W_OK);
-    } catch {
-      destination = await outputDirectory(settings);
-    }
+    const { directory, name } = await destination();
     const target = await uniquePath(
-      destination,
-      `${safeName(parse(path).name)} - ${transcriptSuffix(language, translate)}${format === "raw" ? " - RAW" : ""}`,
+      directory,
+      `${name} - ${transcriptSuffix(language, translate)}${format === "raw" ? " - RAW" : ""}`,
       format === "raw" ? "txt" : format,
     );
     await writeFile(
@@ -435,64 +445,83 @@ export async function transcribeFile(
   }
 }
 
-export async function transcribe(
-  video: Video,
+/**
+ * Transcribes a local audio or video file and saves the result next to it, or
+ * in the download folder when that folder is not writable.
+ */
+export async function transcribeFile(
+  path: string,
+  options: TranscriptionOptions,
   settings: Settings,
   onProgress?: (message: string) => void,
-): Promise<string[]> {
-  if (video.captions.length)
-    throw new Error(
-      "This video has captions. Choose an available caption track to download.",
-    );
-  const setup = await whisperSetup(settings, undefined, onProgress);
+  signal?: AbortSignal,
+): Promise<string> {
+  if (!localFileInfo(path)?.isFile)
+    throw new Error(`${path} is not a file that can be read.`);
+  return await transcribeAudio(
+    async () => path,
+    async () => {
+      try {
+        await access(dirname(path), constants.W_OK);
+        return { directory: dirname(path), name: safeName(parse(path).name) };
+      } catch {
+        return {
+          directory: await outputDirectory(settings),
+          name: safeName(parse(path).name),
+        };
+      }
+    },
+    options,
+    settings,
+    onProgress,
+    signal,
+  );
+}
+
+/** Downloads a video's audio with yt-dlp, transcribes it, and saves the result in the download folder. */
+export async function transcribeVideo(
+  video: Pick<Video, "id" | "title" | "url">,
+  options: TranscriptionOptions,
+  settings: Settings,
+  onProgress?: (message: string) => void,
+  signal?: AbortSignal,
+): Promise<string> {
   const ytDlp = await executable(settings.ytDlpPath, "yt-dlp");
-  const destination = await outputDirectory(settings);
-  const temporary = await mkdtemp(join(tmpdir(), "raycast-whisper-"));
-  try {
-    onProgress?.("Downloading audio…");
-    await run(ytDlp, [
-      "--no-playlist",
-      "--no-warnings",
-      "-f",
-      "bestaudio/best",
-      "-o",
-      join(temporary, "audio.%(ext)s"),
-      video.url,
-    ]);
-    const audio = (await readdir(temporary)).find(
-      (name) => name.startsWith("audio.") && !name.endsWith(".part"),
-    );
-    if (!audio) throw new Error("yt-dlp did not produce an audio file.");
-    const wav = await whisperAudio(
-      join(temporary, audio),
-      temporary,
-      settings,
-      onProgress,
-    );
-    const stem = `${safeName(video.title)} [${video.id}] - whisper-${safeName(settings.whisperLanguage || "Serbian")}`;
-    const outputBase = await uniqueBase(destination, stem, [
-      "srt",
-      "vtt",
-      "txt",
-    ]);
-    const result = await runWhisper(
-      setup,
-      wav,
-      settings.whisperLanguage?.trim() || "Serbian",
-      ["srt", "vtt", "txt"],
-      temporary,
-      onProgress,
-    );
-    const paths: string[] = [];
-    for (const extension of ["srt", "vtt", "txt"]) {
-      const source = `${result}.${extension}`;
-      await access(source, constants.R_OK);
-      const target = `${outputBase}.${extension}`;
-      await copyFile(source, target, constants.COPYFILE_EXCL);
-      paths.push(target);
-    }
-    return paths;
-  } finally {
-    await rm(temporary, { recursive: true, force: true });
-  }
+  const directory = await outputDirectory(settings);
+  return await transcribeAudio(
+    async (temporary) => {
+      onProgress?.("Downloading audio…");
+      await run(
+        ytDlp,
+        [
+          ...(await ytDlpOptions(settings)),
+          "--no-playlist",
+          "-f",
+          "bestaudio/best",
+          "-o",
+          join(temporary, "audio.%(ext)s"),
+          video.url,
+        ],
+        (line) => {
+          const match = /\[download\]\s+([\d.]+)%/.exec(line);
+          if (match)
+            onProgress?.(`Downloading audio… ${Math.floor(Number(match[1]))}%`);
+        },
+        signal,
+      );
+      const audio = (await readdir(temporary)).find(
+        (name) => name.startsWith("audio.") && !name.endsWith(".part"),
+      );
+      if (!audio) throw new Error("yt-dlp did not produce an audio file.");
+      return join(temporary, audio);
+    },
+    async () => ({
+      directory,
+      name: `${safeName(video.title)} [${video.id}]`,
+    }),
+    options,
+    settings,
+    onProgress,
+    signal,
+  );
 }

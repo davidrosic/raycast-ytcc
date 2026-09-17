@@ -26,6 +26,13 @@
       "subtitle": "Finder · whisper.cpp",
       "description": "Transcribe the audio or video files selected in Finder with whisper.cpp large-v3-turbo",
       "mode": "view"
+    },
+    {
+      "name": "transcription-queue",
+      "title": "Transcription Queue",
+      "subtitle": "Progress, cancel & results",
+      "description": "See running, queued and finished transcriptions, cancel them, and open the results. The queue keeps running when you close Raycast.",
+      "mode": "view"
     }
   ],
   "preferences": [
@@ -78,6 +85,15 @@
       "title": "Silero VAD Model",
       "description": "Optional; ggml-silero-v6.2.0.bin (885 KB) is downloaded automatically when not set",
       "type": "file",
+      "required": false
+    },
+    {
+      "name": "notifyWhenDone",
+      "title": "Notifications",
+      "label": "Notify when the queue finishes",
+      "description": "Show a macOS notification when all queued transcriptions are done",
+      "type": "checkbox",
+      "default": true,
       "required": false
     },
     {

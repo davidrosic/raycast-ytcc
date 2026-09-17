@@ -45,6 +45,7 @@ export type Settings = {
   modelPath?: string;
   skipSilence?: boolean;
   vadModelPath?: string;
+  notifyWhenDone?: boolean;
   whisperLanguage?: string;
   favoriteLanguages?: string;
   /** The extension's support folder, for files it downloads such as the VAD model. */
@@ -206,8 +207,9 @@ export function isMediaFile(path: string): boolean {
  */
 export function mediaFiles(paths: string[], limit = 2000): string[] {
   const files = new Set<string>();
+  let visited = 0;
   const visit = (path: string, chosen: boolean) => {
-    if (files.size >= limit) return;
+    if (files.size >= limit || ++visited > limit * 25) return;
     let info;
     try {
       info = statSync(path);
@@ -670,7 +672,7 @@ export async function run(
  * Raycast's PATH usually doesn't include Homebrew, and subtitle conversion
  * fails without it.
  */
-async function ytDlpOptions(settings: Settings): Promise<string[]> {
+export async function ytDlpOptions(settings: Settings): Promise<string[]> {
   const options = ["--no-warnings"];
   try {
     options.push(
