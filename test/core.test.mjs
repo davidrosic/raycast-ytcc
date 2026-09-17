@@ -252,3 +252,17 @@ test("SRT export removes empty cues and renumbers valid cues", () => {
     "1\n00:00:01,000 --> 00:00:02,000\nHello\n\n2\n00:00:03,000 --> 00:00:04,000\nWorld\n",
   );
 });
+
+test("names transcripts and knows which models can translate", () => {
+  assert.equal(core.transcriptSuffix("sr"), "whisper-Serbian");
+  assert.equal(core.transcriptSuffix("sr", true), "whisper-Serbian to English");
+  assert.equal(core.transcriptSuffix("auto", true), "whisper-auto to English");
+  assert.equal(core.transcriptSuffix("en", true), "whisper-English");
+  assert.equal(core.canTranslate("/m/ggml-large-v3-turbo-q5_0.bin"), false);
+  assert.equal(core.canTranslate("/m/ggml-large-v3.bin"), true);
+  assert.equal(core.modelName("/m/ggml-medium.en.bin"), "medium.en");
+  assert.equal(
+    core.coreMlEncoder("/m/ggml-large-v3-turbo-q5_0.bin"),
+    "/m/ggml-large-v3-turbo-encoder.mlmodelc",
+  );
+});

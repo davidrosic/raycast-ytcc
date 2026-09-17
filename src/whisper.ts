@@ -299,9 +299,12 @@ async function runWhisper(
   outputs: string[],
   temporary: string,
   onProgress?: (message: string) => void,
+  translate = false,
 ): Promise<string> {
   const result = join(temporary, "result");
-  onProgress?.(`Transcribing with ${modelName(model)}…`);
+  onProgress?.(
+    `${translate ? "Translating" : "Transcribing"} with ${modelName(model)}…`,
+  );
   try {
     await run(
       whisper,
@@ -312,6 +315,7 @@ async function runWhisper(
         wav,
         "-l",
         language,
+        ...(translate ? ["--translate"] : []),
         ...(vad ? ["--vad", "--vad-model", vad] : []),
         "--print-progress",
         ...outputs.map((extension) => `--output-${extension}`),
@@ -320,7 +324,10 @@ async function runWhisper(
       ],
       (line) => {
         const match = /progress\s*=\s*(\d+)%/.exec(line);
-        if (match) onProgress?.(`Transcribing… ${match[1]}%`);
+        if (match)
+          onProgress?.(
+            `${translate ? "Translating" : "Transcribing"}… ${match[1]}%`,
+          );
       },
     );
   } catch (error) {
@@ -357,17 +364,35 @@ export type TranscriptionOptions = {
   format: ExportFormat;
   /** The model file; the default model when not set. */
   model?: string;
+  /** Translate the speech to English instead of transcribing it. */
+  translate?: boolean;
 };
+
+/** Turbo models were not trained to translate and answer in the spoken language instead. */
+export function canTranslate(model: string): boolean {
+  return !/turbo/i.test(modelName(model));
+}
+
+/** The end of a transcription's file name, for example `whisper-Serbian` or `whisper-Serbian to English`. */
+export function transcriptSuffix(language: string, translate?: boolean) {
+  const spoken =
+    language === "auto" ? "auto" : safeName(whisperLanguageName(language));
+  return `whisper-${spoken}${translate && language !== "en" ? " to English" : ""}`;
+}
 
 export async function transcribeFile(
   path: string,
-  { language, format, model }: TranscriptionOptions,
+  { language, format, model, translate }: TranscriptionOptions,
   settings: Settings,
   onProgress?: (message: string) => void,
 ): Promise<string> {
   if (!localFileInfo(path)?.isFile)
     throw new Error(`${path} is not a file that can be read.`);
   const setup = await whisperSetup(settings, model, onProgress);
+  if (translate && !canTranslate(setup.model))
+    throw new Error(
+      `${modelName(setup.model)} can't translate. Choose large-v3 or another model without “turbo” in its name.`,
+    );
   const temporary = await mkdtemp(join(tmpdir(), "raycast-whisper-"));
   try {
     const wav = await whisperAudio(path, temporary, settings, onProgress);
@@ -379,6 +404,7 @@ export async function transcribeFile(
       [source],
       temporary,
       onProgress,
+      translate,
     );
     const output = await readFile(`${result}.${source}`, "utf8");
     let destination = dirname(path);
@@ -389,7 +415,7 @@ export async function transcribeFile(
     }
     const target = await uniquePath(
       destination,
-      `${safeName(parse(path).name)} - whisper-${language === "auto" ? "auto" : safeName(whisperLanguageName(language))}${format === "raw" ? " - RAW" : ""}`,
+      `${safeName(parse(path).name)} - ${transcriptSuffix(language, translate)}${format === "raw" ? " - RAW" : ""}`,
       format === "raw" ? "txt" : format,
     );
     await writeFile(

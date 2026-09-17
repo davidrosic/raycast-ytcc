@@ -22,6 +22,7 @@ import {
 import {
   TranscriptionOptions,
   WhisperModel,
+  canTranslate,
   modelName,
   transcribeFile,
   whisperModels,
@@ -161,6 +162,7 @@ export function TranscribeForm({
   const [paths, setPaths] = useState(initialPaths);
   const [filesError, setFilesError] = useState<string>();
   const [modelError, setModelError] = useState<string>();
+  const [translateError, setTranslateError] = useState<string>();
   const models = useWhisperModels(settings);
   const names = (language: { code: string; name: string }) => [
     language.code,
@@ -198,6 +200,7 @@ export function TranscribeForm({
               language: string;
               format: ExportFormat;
               model?: string;
+              translate: boolean;
             }) => {
               if (isLoading) return;
               const files = paths.filter((path) => localFileInfo(path)?.isFile);
@@ -214,10 +217,17 @@ export function TranscribeForm({
                 );
                 return;
               }
+              if (values.translate && model && !canTranslate(model.path)) {
+                setTranslateError(
+                  `${modelName(model.path)} can't translate. Choose a model without “turbo”.`,
+                );
+                return;
+              }
               onTranscribe(files, {
                 language: values.language,
                 format: values.format,
                 model: model?.path,
+                translate: values.translate,
               });
             }}
           />
@@ -280,7 +290,10 @@ export function TranscribeForm({
           title="Model"
           defaultValue={models.defaultModel}
           error={modelError}
-          onChange={() => setModelError(undefined)}
+          onChange={() => {
+            setModelError(undefined);
+            setTranslateError(undefined);
+          }}
           info="large-v3 is the most accurate and the slowest. large-v3-turbo is much faster and nearly as accurate. Quantized models such as q5_0 are smaller and faster, and slightly less accurate."
         >
           {models.models.map((model) => (
@@ -297,6 +310,15 @@ export function TranscribeForm({
           text="No whisper model was found. Select ggml-large-v3-turbo.bin in extension preferences."
         />
       )}
+      <Form.Checkbox
+        id="translate"
+        title="Translation"
+        label="Translate to English"
+        defaultValue={false}
+        error={translateError}
+        onChange={() => setTranslateError(undefined)}
+        info="Whisper writes the English translation instead of the spoken language. Turbo models can't translate; use large-v3 or medium."
+      />
       <Form.Description text="⌘↵ converts the audio to 16 kHz WAV with ffmpeg and transcribes it with whisper.cpp. Each result is saved next to its file." />
     </Form>
   );
