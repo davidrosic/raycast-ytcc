@@ -449,10 +449,12 @@ export async function runQueueWorker(folder: string) {
           if (job.status !== "queued" || running.has(lane(job))) continue;
           running.set(
             lane(job),
-            runJob(folder, job).then((result) => {
-              finished.push(result);
-              running.delete(lane(job));
-            }),
+            runJob(folder, job)
+              .then(
+                (result) => void finished.push(result),
+                (error) => console.error(error),
+              )
+              .finally(() => running.delete(lane(job))),
           );
         }
         for (const job of readJobs(folder))
