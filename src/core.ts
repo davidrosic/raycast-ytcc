@@ -54,30 +54,35 @@ export type Settings = {
   supportPath?: string;
 };
 
-export function youtubeId(input: string): string {
+const youtubeHosts = [
+  "youtube.com",
+  "www.youtube.com",
+  "m.youtube.com",
+  "music.youtube.com",
+  "youtube-nocookie.com",
+  "www.youtube-nocookie.com",
+];
+
+/** Parses a link, adding `https://` when it has no scheme. */
+function parseLink(input: string): URL | undefined {
   const value = input.trim();
-  let url: URL;
   try {
-    url = new URL(
+    return new URL(
       /^[a-z][a-z\d+.-]*:/i.test(value) ? value : `https://${value}`,
     );
   } catch {
-    throw new Error("Enter a valid YouTube video URL.");
+    return undefined;
   }
+}
+
+export function youtubeId(input: string): string {
+  const url = parseLink(input);
+  if (!url) throw new Error("Enter a valid YouTube video URL.");
   if (!["https:", "http:"].includes(url.protocol))
     throw new Error("Enter a YouTube video URL.");
   const host = url.hostname.toLowerCase();
   let id: string | null = null;
-  if (
-    [
-      "youtube.com",
-      "www.youtube.com",
-      "m.youtube.com",
-      "music.youtube.com",
-      "youtube-nocookie.com",
-      "www.youtube-nocookie.com",
-    ].includes(host)
-  ) {
+  if (youtubeHosts.includes(host)) {
     if (url.pathname === "/watch") id = url.searchParams.get("v");
     else if (/^\/(shorts|live|embed)\//.test(url.pathname))
       id = url.pathname.split("/")[2];
@@ -103,8 +108,49 @@ export function isYoutubeUrl(input: string): boolean {
   }
 }
 
+/**
+ * A YouTube playlist or channel link, normalized, or undefined for anything
+ * else. Channel links can name the Videos, Shorts or Live tab.
+ */
+export function youtubeCollectionUrl(input: string): string | undefined {
+  const url = parseLink(input);
+  if (
+    !url ||
+    !["https:", "http:"].includes(url.protocol) ||
+    !youtubeHosts.includes(url.hostname.toLowerCase()) ||
+    /\s/.test(input.trim())
+  )
+    return undefined;
+  const list = url.searchParams.get("list");
+  if (url.pathname === "/playlist" && list && /^[\w-]{2,}$/.test(list))
+    return `https://www.youtube.com/playlist?list=${list}`;
+  const channel =
+    /^\/(@[^/]+|channel\/UC[\w-]{22}|c\/[^/]+|user\/[^/]+)(\/(?:videos|shorts|streams))?\/?$/i.exec(
+      url.pathname,
+    );
+  return channel
+    ? `https://www.youtube.com/${channel[1]}${channel[2] ?? ""}`
+    : undefined;
+}
+
+/** The playlist a video link was opened from, such as `watch?v=…&list=…`. */
+export function youtubePlaylistOf(input: string): string | undefined {
+  if (!isYoutubeUrl(input)) return undefined;
+  const list = parseLink(input)?.searchParams.get("list");
+  return list && /^[\w-]{2,}$/.test(list)
+    ? `https://www.youtube.com/playlist?list=${list}`
+    : undefined;
+}
+
+/** A YouTube video, playlist or channel link. */
+export function isYoutubeLink(input: string): boolean {
+  return isYoutubeUrl(input) || Boolean(youtubeCollectionUrl(input));
+}
+
 export function mediaUrl(input: string): string {
   if (isYoutubeUrl(input)) return youtubeUrl(input);
+  const collection = youtubeCollectionUrl(input);
+  if (collection) return collection;
   let url: URL;
   try {
     url = new URL(input.trim());
@@ -143,11 +189,10 @@ export function pastedYoutubeLink(
   const pasted = insertedText(previous, next).trim();
   const value = next.trim();
   if (pasted.length < 2) return undefined;
-  if (isYoutubeUrl(pasted))
-    return isYoutubeUrl(value) && youtubeId(value) === youtubeId(pasted)
-      ? value
-      : pasted;
-  return isYoutubeUrl(value) ? value : undefined;
+  const key = (input: string) =>
+    isYoutubeUrl(input) ? youtubeId(input) : youtubeCollectionUrl(input);
+  if (key(pasted)) return key(value) === key(pasted) ? value : pasted;
+  return key(value) ? value : undefined;
 }
 
 /**
@@ -976,6 +1021,19 @@ export async function uniqueBase(
   throw new Error("Too many files with the same name in the download folder.");
 }
 
+/** A downloaded caption's file name without extension, for example `Title [id] - sr - auto`. */
+export function captionStem(
+  video: Pick<Video, "id" | "title">,
+  caption: Pick<Caption, "language" | "kind">,
+  format: ExportFormat,
+): string {
+  return `${safeName(video.title)} [${video.id}] - ${safeName(caption.language)}${caption.kind === "automatic" ? " - auto" : ""}${format === "raw" ? " - RAW" : ""}`;
+}
+
+export function captionExtension(format: ExportFormat): string {
+  return format === "raw" ? "txt" : format;
+}
+
 export async function downloadCaption(
   video: Video,
   caption: Caption,
@@ -983,8 +1041,9 @@ export async function downloadCaption(
   settings: Settings,
   onProgress?: (message: string) => void,
   signal?: AbortSignal,
+  directory?: string,
 ): Promise<string> {
-  const destination = await outputDirectory(settings);
+  const destination = directory ?? (await outputDirectory(settings));
   const temporary = await mkdtemp(join(tmpdir(), "raycast-captions-"));
   try {
     const preferred =
@@ -1049,7 +1108,7 @@ export async function downloadCaption(
       throw new Error(
         `yt-dlp did not produce a ${extension.toUpperCase()} file for ${caption.language}.`,
       );
-    const stem = `${safeName(video.title)} [${video.id}] - ${safeName(caption.language)}${caption.kind === "automatic" ? " - auto" : ""}${format === "raw" ? " - RAW" : ""}`;
+    const stem = captionStem(video, caption, format);
     const target = await uniquePath(
       destination,
       stem,

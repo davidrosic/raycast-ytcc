@@ -11,7 +11,7 @@ const compiled = join(temporary, "core.cjs");
 require("esbuild").buildSync({
   stdin: {
     contents:
-      'export * from "./src/core"; export * from "./src/whisper"; export * from "./src/updates";',
+      'export * from "./src/core"; export * from "./src/whisper"; export * from "./src/updates"; export * from "./src/playlists"; export { queueSummary } from "./src/jobs";',
     resolveDir: process.cwd(),
     loader: "ts",
   },
@@ -401,5 +401,178 @@ test("compares yt-dlp versions and picks the update command", () => {
       "Ïúíþ",
     ).args,
     ["-U"],
+  );
+});
+
+test("recognizes playlist and channel links", () => {
+  assert.equal(
+    core.youtubeCollectionUrl("youtube.com/playlist?list=PLabc_123-x&si=1"),
+    "https://www.youtube.com/playlist?list=PLabc_123-x",
+  );
+  assert.equal(
+    core.youtubeCollectionUrl(
+      "https://music.youtube.com/playlist?list=OLAK5uy_x",
+    ),
+    "https://www.youtube.com/playlist?list=OLAK5uy_x",
+  );
+  assert.equal(
+    core.youtubeCollectionUrl("https://www.youtube.com/@jawed/videos/"),
+    "https://www.youtube.com/@jawed/videos",
+  );
+  assert.equal(
+    core.youtubeCollectionUrl("m.youtube.com/channel/UC4QobU6STFB0P71PMvOGN5A"),
+    "https://www.youtube.com/channel/UC4QobU6STFB0P71PMvOGN5A",
+  );
+  assert.equal(
+    core.youtubeCollectionUrl("https://www.youtube.com/@jawed/community"),
+    undefined,
+  );
+  assert.equal(
+    core.youtubeCollectionUrl(
+      "https://www.youtube.com/watch?v=jNQXAC9IVRw&list=PL1",
+    ),
+    undefined,
+  );
+  assert.equal(core.youtubeCollectionUrl("https://vimeo.com/@x"), undefined);
+  assert.equal(
+    core.youtubePlaylistOf(
+      "https://www.youtube.com/watch?v=jNQXAC9IVRw&list=PLxyz",
+    ),
+    "https://www.youtube.com/playlist?list=PLxyz",
+  );
+  assert.equal(
+    core.mediaUrl("youtube.com/@jawed"),
+    "https://www.youtube.com/@jawed",
+  );
+  assert.equal(
+    core.pastedYoutubeLink("", "https://www.youtube.com/@jawed"),
+    "https://www.youtube.com/@jawed",
+  );
+  assert.equal(
+    core.pastedYoutubeLink(
+      "https://www.youtube.com/@jawe",
+      "https://www.youtube.com/@jawed",
+    ),
+    undefined,
+  );
+});
+
+test("flattens channel tabs and picks captions for playlist downloads", () => {
+  const playlist = core.parsePlaylist(
+    {
+      id: "@x",
+      title: "Channel",
+      channel: "Channel",
+      entries: [
+        {
+          _type: "playlist",
+          title: "Channel - Videos",
+          entries: [
+            { id: "aaaaaaaaaaa", title: "One", duration: 61 },
+            { id: "bbbbbbbbbbb", title: "Two" },
+          ],
+        },
+        {
+          _type: "playlist",
+          title: "Channel - Shorts",
+          entries: [
+            { id: "bbbbbbbbbbb", title: "Two" },
+            { id: "ccccccccccc", title: "Short" },
+          ],
+        },
+      ],
+    },
+    "https://www.youtube.com/@x",
+  );
+  assert.deepEqual(
+    playlist.entries.map((entry) => entry.title),
+    ["One", "Two", "Short"],
+  );
+  assert.equal(
+    playlist.thumbnail,
+    "https://i.ytimg.com/vi/aaaaaaaaaaa/mqdefault.jpg",
+  );
+  const captions = [
+    { language: "en", kind: "automatic", formats: ["vtt"] },
+    { language: "sr-orig", kind: "automatic", formats: ["vtt"] },
+    { language: "sr", kind: "automatic", formats: ["vtt"] },
+    { language: "iw", kind: "manual", formats: ["vtt"] },
+  ];
+  assert.equal(core.pickCaption(captions, "sr", "any").language, "sr-orig");
+  assert.equal(core.pickCaption(captions, "sr", "manual"), undefined);
+  assert.equal(
+    core.pickCaption(
+      [...captions, { language: "sr-Latn", kind: "manual", formats: ["vtt"] }],
+      "sr",
+      "any",
+    ).language,
+    "sr-Latn",
+  );
+  assert.equal(core.pickCaption(captions, "he", "manual").language, "iw");
+  // English is a translation of the Serbian speech
+  assert.equal(core.pickCaption(captions, "en", "any"), undefined);
+  assert.equal(core.pickCaption(captions, "en", "translated").language, "en");
+  // without an -orig track, automatic captions count as the spoken language
+  assert.equal(
+    core.pickCaption(
+      [{ language: "en", kind: "automatic", formats: ["vtt"] }],
+      "en",
+      "any",
+    ).language,
+    "en",
+  );
+  const files = [
+    "One [aaaaaaaaaaa] - sr-orig - auto.srt",
+    "Two [bbbbbbbbbbb] - en - RAW.txt",
+  ];
+  assert.equal(
+    core.alreadySaved(files, { id: "aaaaaaaaaaa" }, "sr", "srt"),
+    files[0],
+  );
+  assert.equal(
+    core.alreadySaved(files, { id: "aaaaaaaaaaa" }, "sr", "vtt"),
+    undefined,
+  );
+  assert.equal(
+    core.alreadySaved(files, { id: "bbbbbbbbbbb" }, "en", "raw"),
+    files[1],
+  );
+  assert.equal(
+    core.alreadySaved(files, { id: "bbbbbbbbbbb" }, "en", "txt"),
+    undefined,
+  );
+});
+
+test("summarizes a finished queue", () => {
+  const file = (status, error) => ({
+    title: "a.m4a",
+    status,
+    error,
+    spec: { kind: "file" },
+  });
+  assert.equal(
+    core.queueSummary([file("done"), file("done")]),
+    "2 transcriptions saved",
+  );
+  assert.equal(
+    core.queueSummary([file("failed", "No audio")]),
+    "a.m4a: No audio",
+  );
+  assert.equal(
+    core.queueSummary([file("done"), file("failed", "x")]),
+    "1 of 2 transcriptions saved, 1 failed",
+  );
+  assert.equal(core.queueSummary([file("canceled")]), undefined);
+  assert.equal(
+    core.queueSummary([
+      {
+        title: "Talks",
+        status: "done",
+        outputs: ["a", "b"],
+        skipped: [{}],
+        spec: { kind: "playlist" },
+      },
+    ]),
+    "Talks: subtitles for 2 of 3 videos saved",
   );
 });

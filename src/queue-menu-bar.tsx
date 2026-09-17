@@ -57,7 +57,7 @@ export default function Command() {
           .filter(Boolean)
           .join(" ") || undefined
       }
-      tooltip="Transcription Queue"
+      tooltip="Queue"
     >
       {active.length > 0 && (
         <MenuBarExtra.Section title="In Progress">
@@ -83,7 +83,7 @@ export default function Command() {
       {recent.length > 0 && (
         <MenuBarExtra.Section title="Finished">
           {recent.map((job) => {
-            const output = job.outputs?.[0];
+            const output = job.folder ?? job.outputs?.[0];
             return (
               <MenuBarExtra.Item
                 key={job.id}

@@ -14,6 +14,7 @@ import {
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import { Settings } from "./core";
+import { PlaylistDownload, downloadPlaylistSubtitles } from "./playlists";
 import {
   TranscriptionOptions,
   transcribeFile,
@@ -26,7 +27,8 @@ export type JobSpec =
       kind: "video";
       video: { id: string; title: string; url: string };
       options: TranscriptionOptions;
-    };
+    }
+  | ({ kind: "playlist" } & PlaylistDownload);
 
 export type JobStatus = "queued" | "running" | "done" | "failed" | "canceled";
 
@@ -42,6 +44,10 @@ export type Job = {
   progress?: string;
   percent?: number;
   outputs?: string[];
+  /** Playlist videos without a matching caption, or that failed. */
+  skipped?: { title: string; reason: string }[];
+  /** The folder a playlist's subtitles are saved in. */
+  folder?: string;
   error?: string;
   /** The process running the job. */
   worker?: number;
@@ -304,12 +310,12 @@ async function runJob(folder: string, queued: Job): Promise<Job> {
     if (existsSync(cancelFile(folder, job.id))) controller.abort();
   }, 500);
   let saved = 0;
-  const onProgress = (message: string) => {
-    const percent = /(\d+)%/.exec(message);
+  const onProgress = (message: string, percent?: number) => {
+    const match = percent === undefined ? /(\d+)%/.exec(message) : null;
     job = {
       ...job,
       progress: message,
-      percent: percent ? Number(percent[1]) : undefined,
+      percent: match ? Number(match[1]) : percent,
     };
     if (Date.now() - saved > 400) {
       saved = Date.now();
@@ -318,30 +324,51 @@ async function runJob(folder: string, queued: Job): Promise<Job> {
   };
   try {
     const { spec, settings } = job;
-    const outputs =
-      spec.kind === "file"
-        ? [
-            await transcribeFile(
-              spec.path,
-              spec.options,
-              settings,
-              onProgress,
-              controller.signal,
-            ),
-          ]
-        : [
-            await transcribeVideo(
-              spec.video,
-              spec.options,
-              settings,
-              onProgress,
-              controller.signal,
-            ),
-          ];
-    job = { ...job, status: "done", outputs };
+    if (spec.kind === "playlist") {
+      const result = await downloadPlaylistSubtitles(
+        spec,
+        settings,
+        onProgress,
+        controller.signal,
+      );
+      job = {
+        ...job,
+        ...result,
+        status: result.outputs.length ? "done" : "failed",
+        error: result.outputs.length
+          ? undefined
+          : (result.skipped[0]?.reason ?? "No subtitles were saved"),
+      };
+    } else {
+      const outputs =
+        spec.kind === "file"
+          ? [
+              await transcribeFile(
+                spec.path,
+                spec.options,
+                settings,
+                onProgress,
+                controller.signal,
+              ),
+            ]
+          : [
+              await transcribeVideo(
+                spec.video,
+                spec.options,
+                settings,
+                onProgress,
+                controller.signal,
+              ),
+            ];
+      job = { ...job, status: "done", outputs };
+    }
   } catch (error) {
     job = controller.signal.aborted
-      ? { ...job, status: "canceled" }
+      ? {
+          ...job,
+          ...(error as { partial?: Partial<Job> }).partial,
+          status: "canceled",
+        }
       : {
           ...job,
           status: "failed",
@@ -381,17 +408,31 @@ function notify(title: string, message: string) {
 
 /** A one-line summary of the jobs a worker finished, for its notification. */
 export function queueSummary(jobs: Job[]): string | undefined {
-  const done = jobs.filter((job) => job.status === "done").length;
-  const failed = jobs.filter((job) => job.status === "failed");
-  if (!done && !failed.length) return undefined;
   const count = (value: number, noun: string) =>
     `${value} ${noun}${value === 1 ? "" : "s"}`;
-  if (!failed.length) return `${count(done, "transcription")} saved`;
-  if (!done)
-    return failed.length === 1
-      ? `${failed[0].title}: ${failed[0].error}`
-      : `${count(failed.length, "transcription")} failed`;
-  return `${done} of ${done + failed.length} transcriptions saved, ${failed.length} failed`;
+  const parts: string[] = [];
+  const transcriptions = jobs.filter((job) => job.spec.kind !== "playlist");
+  const done = transcriptions.filter((job) => job.status === "done").length;
+  const failed = transcriptions.filter((job) => job.status === "failed");
+  if (failed.length === 1 && !done && jobs.length === 1)
+    return `${failed[0].title}: ${failed[0].error}`;
+  if (done && failed.length)
+    parts.push(
+      `${done} of ${done + failed.length} transcriptions saved, ${failed.length} failed`,
+    );
+  else if (done) parts.push(`${count(done, "transcription")} saved`);
+  else if (failed.length)
+    parts.push(`${count(failed.length, "transcription")} failed`);
+  for (const job of jobs) {
+    if (job.spec.kind !== "playlist" || job.status === "canceled") continue;
+    const saved = job.outputs?.length ?? 0;
+    parts.push(
+      job.status === "failed" && !saved
+        ? `${job.title}: ${job.error}`
+        : `${job.title}: subtitles for ${saved} of ${saved + (job.skipped?.length ?? 0)} videos saved`,
+    );
+  }
+  return parts.length ? parts.join("\n") : undefined;
 }
 
 /**

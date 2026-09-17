@@ -74,6 +74,70 @@ export function useWhisperModels(settings: Settings) {
   return state;
 }
 
+/** Languages with the favorite languages first; its form value is a whisper.cpp language code. */
+export function LanguageDropdown({
+  title,
+  favoriteLanguages,
+  defaultLanguage,
+  detectAutomatically,
+}: {
+  title: string;
+  favoriteLanguages: string;
+  defaultLanguage: string;
+  detectAutomatically?: boolean;
+}) {
+  const { favorites, suggestions } = rankFavorites(
+    whisperLanguages,
+    (language) => [language.code, language.name],
+    favoriteLanguages,
+  );
+  const featured = new Set([...favorites, ...suggestions]);
+  const item = (language: { code: string; name: string }) => (
+    <Form.Dropdown.Item
+      key={language.code}
+      value={language.code}
+      title={language.name}
+      keywords={[language.code]}
+    />
+  );
+  return (
+    <Form.Dropdown
+      id="language"
+      title={title}
+      defaultValue={
+        !detectAutomatically && defaultLanguage === "auto"
+          ? (favorites[0]?.code ?? "en")
+          : defaultLanguage
+      }
+      info="Your favorite languages are listed first."
+    >
+      {favorites.length > 0 && (
+        <Form.Dropdown.Section title="Favorite Languages">
+          {favorites.map(item)}
+        </Form.Dropdown.Section>
+      )}
+      {suggestions.length > 0 && (
+        <Form.Dropdown.Section title="Suggested Languages">
+          {suggestions.map(item)}
+        </Form.Dropdown.Section>
+      )}
+      <Form.Dropdown.Section title="All Languages">
+        {detectAutomatically && (
+          <Form.Dropdown.Item
+            value="auto"
+            title={whisperLanguageName("auto")}
+            icon={Icon.Wand}
+          />
+        )}
+        {whisperLanguages
+          .filter((language) => !featured.has(language))
+          .sort((a, b) => a.name.localeCompare(b.name))
+          .map(item)}
+      </Form.Dropdown.Section>
+    </Form.Dropdown>
+  );
+}
+
 /**
  * Files, spoken language, output format and model; ⌘↵ submits. For a YouTube
  * video, pass `videoTitle` instead of files.
@@ -102,24 +166,6 @@ export function TranscribeForm({
   const [modelError, setModelError] = useState<string>();
   const [translateError, setTranslateError] = useState<string>();
   const models = useWhisperModels(settings);
-  const names = (language: { code: string; name: string }) => [
-    language.code,
-    language.name,
-  ];
-  const { favorites, suggestions } = rankFavorites(
-    whisperLanguages,
-    names,
-    favoriteLanguages,
-  );
-  const featured = new Set([...favorites, ...suggestions]);
-  const languageItem = (language: { code: string; name: string }) => (
-    <Form.Dropdown.Item
-      key={language.code}
-      value={language.code}
-      title={language.name}
-      keywords={[language.code]}
-    />
-  );
 
   const files = useMemo(() => mediaFiles(paths), [paths]);
 
@@ -204,34 +250,12 @@ export function TranscribeForm({
           }
         />
       )}
-      <Form.Dropdown
-        id="language"
+      <LanguageDropdown
         title="Spoken Language"
-        defaultValue={defaultLanguage}
-        info="Your favorite languages are listed first."
-      >
-        {favorites.length > 0 && (
-          <Form.Dropdown.Section title="Favorite Languages">
-            {favorites.map(languageItem)}
-          </Form.Dropdown.Section>
-        )}
-        {suggestions.length > 0 && (
-          <Form.Dropdown.Section title="Suggested Languages">
-            {suggestions.map(languageItem)}
-          </Form.Dropdown.Section>
-        )}
-        <Form.Dropdown.Section title="All Languages">
-          <Form.Dropdown.Item
-            value="auto"
-            title={whisperLanguageName("auto")}
-            icon={Icon.Wand}
-          />
-          {whisperLanguages
-            .filter((language) => !featured.has(language))
-            .sort((a, b) => a.name.localeCompare(b.name))
-            .map(languageItem)}
-        </Form.Dropdown.Section>
-      </Form.Dropdown>
+        favoriteLanguages={favoriteLanguages}
+        defaultLanguage={defaultLanguage}
+        detectAutomatically
+      />
       <Form.Dropdown id="format" title="Output" defaultValue={defaultFormat}>
         {captionFormats.map((format) => (
           <Form.Dropdown.Item

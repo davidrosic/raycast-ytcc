@@ -47,12 +47,15 @@ export async function addToQueue(
 ): Promise<Job[]> {
   const added = enqueue(settings, jobs);
   refreshMenuBar();
+  const noun = jobs.every((job) => job.spec.kind === "playlist")
+    ? "subtitle download"
+    : "transcription";
   await showToast({
     style: Toast.Style.Success,
     title:
       jobs.length === 1
-        ? "Transcription added to the queue"
-        : `${jobs.length} transcriptions added to the queue`,
+        ? `${noun[0].toUpperCase()}${noun.slice(1)} added to the queue`
+        : `${jobs.length} ${noun}s added to the queue`,
     message: "The queue keeps running when you close Raycast.",
     primaryAction: showQueue
       ? { title: "Show Queue", onAction: showQueue }
@@ -155,24 +158,36 @@ export function jobSubtitle(job: Job): string {
     case "queued":
       return "Waiting";
     case "done":
+      if (job.spec.kind === "playlist")
+        return [
+          `${job.outputs?.length ?? 0} ${job.outputs?.length === 1 ? "subtitle" : "subtitles"} saved`,
+          job.skipped?.length ? `${job.skipped.length} skipped` : "",
+        ]
+          .filter(Boolean)
+          .join(", ");
       return job.outputs?.length === 1
         ? basename(job.outputs[0])
         : `${job.outputs?.length ?? 0} files saved`;
     case "failed":
       return job.error || "Failed";
     default:
-      return "Canceled";
+      return job.outputs?.length
+        ? `Canceled after ${job.outputs.length} saved`
+        : "Canceled";
   }
 }
 
 export function jobToast(job: Job, showQueue?: () => void) {
-  const output = job.outputs?.[0];
+  const output = job.folder ?? job.outputs?.[0];
   showToast(
     job.status === "done"
       ? {
           style: Toast.Style.Success,
-          title: "Transcription saved",
-          message: output,
+          title:
+            job.spec.kind === "playlist"
+              ? `Subtitles saved for ${job.title}`
+              : "Transcription saved",
+          message: job.spec.kind === "playlist" ? jobSubtitle(job) : output,
           primaryAction: output
             ? { title: "Open", onAction: () => open(output) }
             : undefined,
@@ -180,7 +195,7 @@ export function jobToast(job: Job, showQueue?: () => void) {
       : job.status === "failed"
         ? {
             style: Toast.Style.Failure,
-            title: `Transcription failed: ${job.title}`,
+            title: `${job.spec.kind === "playlist" ? "Subtitle download" : "Transcription"} failed: ${job.title}`,
             message: job.error,
             primaryAction: showQueue
               ? { title: "Show Queue", onAction: showQueue }
@@ -221,7 +236,8 @@ export function QueueList({ settings }: { settings: Settings }) {
   );
 
   const item = (job: Job) => {
-    const output = job.outputs?.[0];
+    const output = job.spec.kind === "playlist" ? undefined : job.outputs?.[0];
+    const savedFolder = job.folder;
     const source = job.spec.kind === "file" ? job.spec.path : undefined;
     const elapsed =
       job.startedAt &&
@@ -247,9 +263,11 @@ export function QueueList({ settings }: { settings: Settings }) {
               <ActionPanel.Section>
                 <Action
                   title={
-                    job.status === "running"
-                      ? "Cancel Transcription"
-                      : "Remove from Queue"
+                    job.status === "queued"
+                      ? "Remove from Queue"
+                      : job.spec.kind === "playlist"
+                        ? "Cancel Download"
+                        : "Cancel Transcription"
                   }
                   icon={Icon.XMarkCircle}
                   style={Action.Style.Destructive}
@@ -278,9 +296,27 @@ export function QueueList({ settings }: { settings: Settings }) {
                     />
                   </>
                 )}
-                {job.status !== "done" && (
+                {savedFolder && (
+                  <>
+                    <Action.Open title="Open Folder" target={savedFolder} />
+                    <Action.ShowInFinder path={savedFolder} />
+                  </>
+                )}
+                {job.skipped && job.skipped.length > 0 && (
+                  <Action.CopyToClipboard
+                    title="Copy Skipped Videos"
+                    content={job.skipped
+                      .map((video) => `${video.title}: ${video.reason}`)
+                      .join("\n")}
+                  />
+                )}
+                {(job.status !== "done" || job.spec.kind === "playlist") && (
                   <Action
-                    title="Try Again"
+                    title={
+                      job.status === "done"
+                        ? "Download New Videos"
+                        : "Try Again"
+                    }
                     icon={Icon.RotateClockwise}
                     onAction={() => {
                       retryJob(settings, job);
@@ -323,11 +359,11 @@ export function QueueList({ settings }: { settings: Settings }) {
   };
 
   return (
-    <List navigationTitle="Transcription Queue">
+    <List navigationTitle="Queue">
       <List.EmptyView
         icon={Icon.Waveform}
         title="Nothing in the queue"
-        description="Transcriptions you start appear here. They keep running when you close Raycast."
+        description="Transcriptions and playlist subtitle downloads you start appear here. They keep running when you close Raycast."
       />
       <List.Section title="Running">
         {jobs.filter((job) => job.status === "running").map(item)}

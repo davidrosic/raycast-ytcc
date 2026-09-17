@@ -24,16 +24,20 @@ import {
   favoriteScore,
   formatSize,
   inspectMedia,
-  isYoutubeUrl,
+  isYoutubeLink,
   languageLabel,
   localFileInfo,
   isCanceled,
   localPath,
   mediaUrl,
   rankFavorites,
+  formatDuration,
   whisperLanguageName,
+  youtubeCollectionUrl,
+  youtubePlaylistOf,
   youtubeThumbnail,
 } from "./core";
+import { PlaylistSubtitlesForm, usePlaylist } from "./playlist-form";
 import { cancelJob, isActive } from "./jobs";
 import {
   QueueList,
@@ -65,7 +69,7 @@ export { runQueueWorker } from "./jobs";
 
 /** The video URL for search text that is a link, or undefined for filter text and unfinished links. */
 function typedLink(text: string): { isLink: boolean; url?: string } {
-  if (!/^[a-z][a-z\d+.-]*:\/\//i.test(text) && !isYoutubeUrl(text))
+  if (!/^[a-z][a-z\d+.-]*:\/\//i.test(text) && !isYoutubeLink(text))
     return { isLink: false };
   try {
     return { isLink: true, url: mediaUrl(text) };
@@ -86,7 +90,14 @@ export default function Command() {
       if (path && localFileInfo(path)) push(transcribeForm(path));
     },
   );
-  const state = useVideo(url, settings, inspectMedia);
+  const collectionUrl = url ? youtubeCollectionUrl(url) : undefined;
+  const state = useVideo(
+    collectionUrl ? undefined : url,
+    settings,
+    inspectMedia,
+  );
+  const playlistState = usePlaylist(collectionUrl, settings);
+  const { playlist } = playlistState;
   const { video, preview, error } = state;
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState("");
@@ -260,6 +271,23 @@ export default function Command() {
     />
   );
   const link = filePath ? { isLink: false } : typedLink(query);
+  const listUrl =
+    url && !collectionUrl && !filePath ? youtubePlaylistOf(query) : undefined;
+
+  function playlistForm(target: string, title?: string, count?: number) {
+    return (
+      <PlaylistSubtitlesForm
+        url={target}
+        title={title}
+        count={count}
+        settings={settings}
+        favoriteLanguages={favoriteLanguages.value}
+        defaultLanguage={whisperLanguage}
+        defaultFormat={selectedFormat}
+        onQueued={pop}
+      />
+    );
+  }
   const pendingUrl = link.url !== url ? link.url : undefined;
   const filter = link.isLink || filePath ? "" : query.toLocaleLowerCase();
   const matches = (...texts: string[]) =>
@@ -388,12 +416,23 @@ export default function Command() {
 
   return (
     <List
-      isLoading={busy || Boolean(url && !video && !error && !filePath)}
+      isLoading={
+        busy ||
+        Boolean(
+          url &&
+          !filePath &&
+          (collectionUrl
+            ? !playlist && !playlistState.error
+            : !video && !error),
+        )
+      }
       isShowingDetail={Boolean(url || pendingUrl || filePath)}
       filtering={false}
       searchText={search.text}
       onSearchTextChange={search.onChange}
-      navigationTitle={video?.title || preview.title || "YouTube Download"}
+      navigationTitle={
+        playlist?.title || video?.title || preview.title || "YouTube Download"
+      }
       searchBarPlaceholder={
         url
           ? "Filter languages, or paste another link or file path…"
@@ -581,7 +620,134 @@ export default function Command() {
           />
         </List.Section>
       )}
-      {url && !video && !filePath && (
+      {collectionUrl &&
+        !filePath &&
+        (playlist ? (
+          <>
+            <List.Section
+              title={
+                collectionUrl.includes("/playlist?") ? "Playlist" : "Channel"
+              }
+            >
+              <List.Item
+                title={`Download Subtitles for ${playlist.entries.length} ${playlist.entries.length === 1 ? "Video" : "Videos"}`}
+                subtitle={playlist.title}
+                icon={Icon.Download}
+                detail={
+                  <List.Item.Detail
+                    markdown={detailMarkdown({
+                      image: playlist.thumbnail,
+                      title: playlist.title,
+                      note: "Press ↵ to choose the language and format. One file per video is saved in a folder named after the playlist.",
+                      facts: [
+                        ...(playlist.channel
+                          ? [{ title: "Channel", text: playlist.channel }]
+                          : []),
+                        {
+                          title: "Videos",
+                          text: String(playlist.entries.length),
+                        },
+                      ],
+                    })}
+                  />
+                }
+                actions={
+                  <ActionPanel>
+                    <Action.Push
+                      title="Choose Language and Format"
+                      icon={Icon.Download}
+                      target={playlistForm(
+                        collectionUrl,
+                        playlist.title,
+                        playlist.entries.length,
+                      )}
+                    />
+                    <Action.OpenInBrowser url={collectionUrl} />
+                    {moreActions}
+                  </ActionPanel>
+                }
+              />
+            </List.Section>
+            <List.Section
+              title="Videos"
+              subtitle={
+                playlist.entries.length > 300
+                  ? `First 300 of ${playlist.entries.length}`
+                  : String(playlist.entries.length)
+              }
+            >
+              {playlist.entries.slice(0, 300).map((entry) => (
+                <List.Item
+                  key={entry.id}
+                  title={entry.title}
+                  subtitle={
+                    entry.duration !== undefined
+                      ? formatDuration(entry.duration)
+                      : undefined
+                  }
+                  icon={Icon.Video}
+                  detail={
+                    <List.Item.Detail
+                      markdown={detailMarkdown({
+                        image: `https://i.ytimg.com/vi/${entry.id}/mqdefault.jpg`,
+                        title: entry.title,
+                        note: "Press ↵ to open this video's subtitles, audio and video.",
+                      })}
+                    />
+                  }
+                  actions={
+                    <ActionPanel>
+                      <Action
+                        title="Open Video"
+                        icon={Icon.ArrowRight}
+                        onAction={() => search.open(entry.url)}
+                      />
+                      <Action.OpenInBrowser url={entry.url} />
+                      {moreActions}
+                    </ActionPanel>
+                  }
+                />
+              ))}
+            </List.Section>
+          </>
+        ) : (
+          <List.Item
+            title={
+              playlistState.error
+                ? "Could not load playlist"
+                : "Loading videos…"
+            }
+            subtitle={playlistState.error}
+            icon={playlistState.error ? Icon.Warning : Icon.MagnifyingGlass}
+            detail={
+              <List.Item.Detail
+                markdown={detailMarkdown({
+                  title: playlistState.error
+                    ? "Could not load playlist"
+                    : "Loading videos…",
+                  note: playlistState.error
+                    ? playlistState.error
+                    : "Large channels can take a while to list.",
+                  facts: [{ title: "Link", text: collectionUrl }],
+                })}
+              />
+            }
+            actions={
+              <ActionPanel>
+                {playlistState.error && updateAction}
+                {playlistState.error && (
+                  <Action
+                    title="Try Again"
+                    icon={Icon.RotateClockwise}
+                    onAction={playlistState.retry}
+                  />
+                )}
+                {moreActions}
+              </ActionPanel>
+            }
+          />
+        ))}
+      {url && !collectionUrl && !video && !filePath && (
         <List.Item
           title={error ? "Could not inspect video" : "Loading video…"}
           subtitle={error}
@@ -601,6 +767,31 @@ export default function Command() {
             </ActionPanel>
           }
         />
+      )}
+      {video && listUrl && (
+        <List.Section title="Playlist">
+          <List.Item
+            title="Download Subtitles for Whole Playlist"
+            subtitle="This link is part of a playlist"
+            icon={Icon.List}
+            detail={videoDetail(state, [{ title: "Playlist", text: listUrl }])}
+            actions={
+              <ActionPanel>
+                <Action
+                  title="Open Playlist"
+                  icon={Icon.List}
+                  onAction={() => search.open(listUrl)}
+                />
+                <Action.Push
+                  title="Choose Language and Format"
+                  icon={Icon.Download}
+                  target={playlistForm(listUrl)}
+                />
+                {moreActions}
+              </ActionPanel>
+            }
+          />
+        </List.Section>
       )}
       {video &&
         !filePath &&
