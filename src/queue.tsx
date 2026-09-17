@@ -6,8 +6,10 @@ import {
   Icon,
   Image,
   Keyboard,
+  LaunchType,
   List,
   Toast,
+  launchCommand,
   open,
   showToast,
 } from "@raycast/api";
@@ -30,6 +32,13 @@ import {
 } from "./jobs";
 import { TranscriptionOptions } from "./whisper";
 
+/** Updates the menu bar item right away instead of at its next refresh. */
+function refreshMenuBar() {
+  launchCommand({ name: "queue-menu-bar", type: LaunchType.Background }).catch(
+    () => undefined,
+  );
+}
+
 /** Adds jobs to the background queue and says so in a toast. */
 export async function addToQueue(
   settings: Settings,
@@ -37,6 +46,7 @@ export async function addToQueue(
   showQueue?: () => void,
 ): Promise<Job[]> {
   const added = enqueue(settings, jobs);
+  refreshMenuBar();
   await showToast({
     style: Toast.Style.Success,
     title:
@@ -275,6 +285,7 @@ export function QueueList({ settings }: { settings: Settings }) {
                     onAction={() => {
                       retryJob(settings, job);
                       removeJob(folder, job);
+                      refreshMenuBar();
                       refresh();
                     }}
                   />

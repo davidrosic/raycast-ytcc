@@ -33,6 +33,14 @@
       "subtitle": "Progress, cancel & results",
       "description": "See running, queued and finished transcriptions, cancel them, and open the results. The queue keeps running when you close Raycast.",
       "mode": "view"
+    },
+    {
+      "name": "queue-menu-bar",
+      "title": "Transcription Queue in Menu Bar",
+      "subtitle": "Progress while transcribing",
+      "description": "Shows transcription progress in the menu bar while the queue is running",
+      "mode": "menu-bar",
+      "interval": "10s"
     }
   ],
   "preferences": [
