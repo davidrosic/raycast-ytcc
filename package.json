@@ -66,6 +66,52 @@
       "required": false
     },
     {
+      "name": "browserCookies",
+      "title": "Browser Sign-In",
+      "description": "Off by default. Choose the browser you're signed in to YouTube with to download age-restricted, private and members-only videos. yt-dlp reads that browser's cookies on your Mac; they are never sent anywhere else.",
+      "type": "dropdown",
+      "default": "none",
+      "required": false,
+      "data": [
+        {
+          "title": "Don't Use Browser Sign-In",
+          "value": "none"
+        },
+        {
+          "title": "Safari",
+          "value": "safari"
+        },
+        {
+          "title": "Chrome",
+          "value": "chrome"
+        },
+        {
+          "title": "Firefox",
+          "value": "firefox"
+        },
+        {
+          "title": "Brave",
+          "value": "brave"
+        },
+        {
+          "title": "Edge",
+          "value": "edge"
+        },
+        {
+          "title": "Chromium",
+          "value": "chromium"
+        },
+        {
+          "title": "Opera",
+          "value": "opera"
+        },
+        {
+          "title": "Vivaldi",
+          "value": "vivaldi"
+        }
+      ]
+    },
+    {
       "name": "whisperPath",
       "title": "whisper.cpp CLI",
       "description": "Path to whisper-cli; auto-detected in ~/GitHub/whisper.cpp when available",

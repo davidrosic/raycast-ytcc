@@ -1,4 +1,10 @@
-import { Clipboard, List, Toast, showToast } from "@raycast/api";
+import {
+  Clipboard,
+  List,
+  Toast,
+  openExtensionPreferences,
+  showToast,
+} from "@raycast/api";
 import { useEffect, useRef, useState } from "react";
 import {
   MediaFormat,
@@ -69,6 +75,12 @@ export function useVideo(
           style: Toast.Style.Failure,
           title: "Could not inspect video",
           message: errorMessage(reason),
+          primaryAction: /Browser Sign-In/.test(errorMessage(reason))
+            ? {
+                title: "Open Extension Preferences",
+                onAction: openExtensionPreferences,
+              }
+            : undefined,
         });
       },
     );

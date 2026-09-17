@@ -25,9 +25,9 @@ import {
   run,
   safeName,
   uniquePath,
+  runYtDlp,
   vttToText,
   whisperLanguageName,
-  ytDlpOptions,
 } from "./core";
 
 /** Whether a WAV header already describes the 16 kHz mono 16-bit PCM audio whisper.cpp reads. */
@@ -486,15 +486,13 @@ export async function transcribeVideo(
   onProgress?: (message: string) => void,
   signal?: AbortSignal,
 ): Promise<string> {
-  const ytDlp = await executable(settings.ytDlpPath, "yt-dlp");
   const directory = await outputDirectory(settings);
   return await transcribeAudio(
     async (temporary) => {
       onProgress?.("Downloading audio…");
-      await run(
-        ytDlp,
+      await runYtDlp(
+        settings,
         [
-          ...(await ytDlpOptions(settings)),
           "--no-playlist",
           "--newline",
           "-f",

@@ -46,6 +46,8 @@ export type Settings = {
   skipSilence?: boolean;
   vadModelPath?: string;
   notifyWhenDone?: boolean;
+  /** A browser yt-dlp reads YouTube cookies from, or `none`. */
+  browserCookies?: string;
   whisperLanguage?: string;
   favoriteLanguages?: string;
   /** The extension's support folder, for files it downloads such as the VAD model. */
@@ -694,6 +696,23 @@ export async function run(
   });
 }
 
+export const cookieBrowsers: { value: string; title: string }[] = [
+  { value: "safari", title: "Safari" },
+  { value: "chrome", title: "Chrome" },
+  { value: "firefox", title: "Firefox" },
+  { value: "brave", title: "Brave" },
+  { value: "edge", title: "Edge" },
+  { value: "chromium", title: "Chromium" },
+  { value: "opera", title: "Opera" },
+  { value: "vivaldi", title: "Vivaldi" },
+];
+
+function cookieBrowser(settings: Settings) {
+  return cookieBrowsers.find(
+    (browser) => browser.value === settings.browserCookies,
+  );
+}
+
 /**
  * Options passed to every yt-dlp run. yt-dlp is given ffmpeg's path because
  * Raycast's PATH usually doesn't include Homebrew, and subtitle conversion
@@ -709,7 +728,66 @@ export async function ytDlpOptions(settings: Settings): Promise<string[]> {
   } catch {
     /* yt-dlp reports a missing ffmpeg when a conversion needs it */
   }
+  const browser = cookieBrowser(settings);
+  if (browser) options.push("--cookies-from-browser", browser.value);
   return options;
+}
+
+/** Replaces yt-dlp errors about sign-in and browser cookies with what to do about them. */
+export function explainYtDlpError(error: unknown, settings: Settings): unknown {
+  if (!(error instanceof Error) || isCanceled(error)) return error;
+  const browser = cookieBrowser(settings);
+  const signIn = browser
+    ? ` Make sure you're signed in to YouTube in ${browser.title} with an account that can watch it.`
+    : " To use your YouTube account, choose your browser under Browser Sign-In in extension preferences.";
+  const message = error.message;
+  if (browser && /could not find .*(cookies database|profile)/i.test(message))
+    return new Error(
+      `yt-dlp couldn't find ${browser.title}'s cookies. Under Browser Sign-In in extension preferences, choose the browser you use YouTube in.`,
+    );
+  if (browser && /Operation not permitted|PermissionError/i.test(message))
+    return new Error(
+      `Raycast isn't allowed to read ${browser.title}'s cookies. Give Raycast Full Disk Access in System Settings → Privacy & Security, or choose another browser under Browser Sign-In.`,
+    );
+  if (browser && /decrypt|keychain|Safe Storage/i.test(message))
+    return new Error(
+      `yt-dlp couldn't read ${browser.title}'s cookies. Allow access to “${browser.title} Safe Storage” when macOS asks, or choose another browser under Browser Sign-In.`,
+    );
+  if (
+    /Sign in to confirm your age|age.restricted|inappropriate for some users/i.test(
+      message,
+    )
+  )
+    return new Error(`This video is age-restricted.${signIn}`);
+  if (/members.only|Join this channel/i.test(message))
+    return new Error(`This video is only for channel members.${signIn}`);
+  if (/Private video/i.test(message))
+    return new Error(`This video is private.${signIn}`);
+  if (/confirm you.?re not a bot/i.test(message))
+    return new Error(
+      `YouTube asked to confirm you're not a bot.${signIn} Updating yt-dlp can also help.`,
+    );
+  return error;
+}
+
+/** Runs yt-dlp with the shared options, explaining sign-in and cookie errors. */
+export async function runYtDlp(
+  settings: Settings,
+  args: string[],
+  onProgress?: (line: string) => void,
+  signal?: AbortSignal,
+): Promise<string> {
+  const bin = await executable(settings.ytDlpPath, "yt-dlp");
+  try {
+    return await run(
+      bin,
+      [...(await ytDlpOptions(settings)), ...args],
+      onProgress,
+      signal,
+    );
+  } catch (error) {
+    throw explainYtDlpError(error, settings);
+  }
 }
 
 /** Reads video details with yt-dlp; YouTube links are normalized to a single watch URL. */
@@ -719,16 +797,9 @@ export async function inspectMedia(
   signal?: AbortSignal,
 ): Promise<Video> {
   const url = mediaUrl(urlInput);
-  const bin = await executable(settings.ytDlpPath, "yt-dlp");
-  const output = await run(
-    bin,
-    [
-      "--dump-single-json",
-      "--skip-download",
-      "--no-playlist",
-      "--no-warnings",
-      url,
-    ],
+  const output = await runYtDlp(
+    settings,
+    ["--dump-single-json", "--skip-download", "--no-playlist", url],
     undefined,
     signal,
   );
@@ -907,7 +978,6 @@ export async function downloadCaption(
   onProgress?: (message: string) => void,
   signal?: AbortSignal,
 ): Promise<string> {
-  const bin = await executable(settings.ytDlpPath, "yt-dlp");
   const destination = await outputDirectory(settings);
   const temporary = await mkdtemp(join(tmpdir(), "raycast-captions-"));
   try {
@@ -929,7 +999,6 @@ export async function downloadCaption(
               : caption.formats[0];
     const langPattern = `^${caption.language.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`;
     const args = [
-      ...(await ytDlpOptions(settings)),
       "--no-playlist",
       "--skip-download",
       "--sub-langs",
@@ -946,7 +1015,7 @@ export async function downloadCaption(
       args.push("--convert-subs", "vtt");
     args.push(video.url);
     try {
-      await run(bin, args, undefined, signal);
+      await runYtDlp(settings, args, undefined, signal);
     } catch (error) {
       if (
         caption.kind !== "automatic" ||
@@ -957,8 +1026,8 @@ export async function downloadCaption(
       onProgress?.(
         "YouTube rate limited this caption. Retrying after 60 seconds…",
       );
-      await run(
-        bin,
+      await runYtDlp(
+        settings,
         [...args.slice(0, -1), "--sleep-subtitles", "60", video.url],
         undefined,
         signal,
@@ -1030,21 +1099,13 @@ export async function downloadMedia(
   onProgress?: (message: string) => void,
   signal?: AbortSignal,
 ): Promise<string> {
-  const ytDlp = await executable(settings.ytDlpPath, "yt-dlp");
-  const ffmpeg = await executable(settings.ffmpegPath, "ffmpeg");
+  // MP3, M4A and MP4 all need ffmpeg; fail early with a clear message.
+  await executable(settings.ffmpegPath, "ffmpeg");
   const destination = await outputDirectory(settings);
   const temporary = await mkdtemp(join(tmpdir(), "raycast-media-"));
   try {
     const output = join(temporary, "media.%(ext)s");
-    const args = [
-      "--no-playlist",
-      "--no-warnings",
-      "--newline",
-      "--ffmpeg-location",
-      ffmpeg,
-      "-o",
-      output,
-    ];
+    const args = ["--no-playlist", "--newline", "-o", output];
     if (format === "mp4") {
       args.push(
         "-f",
@@ -1066,8 +1127,8 @@ export async function downloadMedia(
     }
     args.push(video.url);
     onProgress?.(`Downloading ${format.toUpperCase()}…`);
-    await run(
-      ytDlp,
+    await runYtDlp(
+      settings,
       args,
       (line) => {
         const message = mediaProgress(line, format);

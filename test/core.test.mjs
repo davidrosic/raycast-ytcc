@@ -324,3 +324,34 @@ test("summarizes yt-dlp media progress", () => {
     undefined,
   );
 });
+
+test("uses browser sign-in only when chosen and explains sign-in errors", () => {
+  const error = (message) => new Error(`yt-dlp failed (1): ERROR: ${message}`);
+  const explain = (message, settings = {}) =>
+    core.explainYtDlpError(error(message), settings).message;
+  assert.match(
+    explain("[youtube] x: Sign in to confirm your age."),
+    /age-restricted\. To use your YouTube account, choose your browser under Browser Sign-In/,
+  );
+  assert.match(
+    explain("[youtube] x: Sign in to confirm your age.", {
+      browserCookies: "chrome",
+    }),
+    /signed in to YouTube in Chrome/,
+  );
+  assert.match(
+    explain("could not find firefox cookies database in /x", {
+      browserCookies: "firefox",
+    }),
+    /couldn't find Firefox's cookies/,
+  );
+  assert.match(
+    explain("[Errno 1] Operation not permitted: '/x/Cookies.binarycookies'", {
+      browserCookies: "safari",
+    }),
+    /Full Disk Access/,
+  );
+  assert.match(explain("HTTP Error 429: Too Many Requests"), /HTTP Error 429/);
+  const canceled = core.canceledError();
+  assert.equal(core.explainYtDlpError(canceled, {}), canceled);
+});
