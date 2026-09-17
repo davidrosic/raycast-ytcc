@@ -15,10 +15,10 @@ import {
   Settings,
   localFileInfo,
   rankFavorites,
-  transcribeFile,
   whisperLanguageName,
   whisperLanguages,
 } from "./core";
+import { transcribeFile } from "./whisper";
 import { errorMessage } from "./video";
 
 export const captionFormats: { value: ExportFormat; title: string }[] = [

@@ -9,7 +9,11 @@ const require = createRequire(import.meta.url);
 const temporary = mkdtempSync(join(tmpdir(), "raycast-core-test-"));
 const compiled = join(temporary, "core.cjs");
 require("esbuild").buildSync({
-  entryPoints: ["src/core.ts"],
+  stdin: {
+    contents: 'export * from "./src/core"; export * from "./src/whisper";',
+    resolveDir: process.cwd(),
+    loader: "ts",
+  },
   outfile: compiled,
   bundle: true,
   platform: "node",

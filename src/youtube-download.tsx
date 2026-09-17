@@ -30,7 +30,6 @@ import {
   localPath,
   mediaUrl,
   rankFavorites,
-  transcribe,
   whisperLanguageName,
   youtubeThumbnail,
 } from "./core";
@@ -49,6 +48,7 @@ import {
   useVideo,
   videoDetail,
 } from "./video";
+import { transcribe } from "./whisper";
 
 /** The video URL for search text that is a link, or undefined for filter text and unfinished links. */
 function typedLink(text: string): { isLink: boolean; url?: string } {
