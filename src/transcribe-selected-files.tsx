@@ -1,10 +1,7 @@
-import {
-  Form,
-  getPreferenceValues,
-  getSelectedFinderItems,
-} from "@raycast/api";
+import { Form, getSelectedFinderItems } from "@raycast/api";
 import { useEffect, useState } from "react";
-import { Settings, defaultWhisperLanguage, localFileInfo } from "./core";
+import { defaultWhisperLanguage, localFileInfo } from "./core";
+import { preferences } from "./preferences";
 import {
   TranscribeForm,
   transcribeWithToast,
@@ -12,7 +9,7 @@ import {
 } from "./transcription";
 
 export default function Command() {
-  const settings = getPreferenceValues<Settings>();
+  const settings = preferences();
   const favoriteLanguages = useFavoriteLanguages(settings);
   const [selection, setSelection] = useState<string[]>();
   const [running, setRunning] = useState(false);

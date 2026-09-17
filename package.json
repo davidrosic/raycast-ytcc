@@ -65,6 +65,22 @@
       "required": false
     },
     {
+      "name": "skipSilence",
+      "title": "Voice Activity Detection",
+      "label": "Skip silence with Silero VAD",
+      "description": "Transcribe only the parts with speech. This stops whisper from inventing text during silence and music, and is faster.",
+      "type": "checkbox",
+      "default": true,
+      "required": false
+    },
+    {
+      "name": "vadModelPath",
+      "title": "Silero VAD Model",
+      "description": "Optional; ggml-silero-v6.2.0.bin (885 KB) is downloaded automatically when not set",
+      "type": "file",
+      "required": false
+    },
+    {
       "name": "whisperLanguage",
       "title": "Transcription Language",
       "description": "Spoken language, for example Serbian or auto",

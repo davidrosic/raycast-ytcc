@@ -5,7 +5,6 @@ import {
   Icon,
   List,
   Toast,
-  getPreferenceValues,
   openExtensionPreferences,
   showInFinder,
   showToast,
@@ -13,11 +12,11 @@ import {
 } from "@raycast/api";
 import { basename, dirname } from "node:path";
 import { useMemo, useState } from "react";
+import { preferences } from "./preferences";
 import {
   Caption,
   ExportFormat,
   MediaFormat,
-  Settings,
   defaultWhisperLanguage,
   downloadCaption,
   downloadMedia,
@@ -63,7 +62,7 @@ function typedLink(text: string): { isLink: boolean; url?: string } {
 
 export default function Command() {
   const { push, pop } = useNavigation();
-  const settings = getPreferenceValues<Settings>();
+  const settings = preferences();
   const [url, setUrl] = useState<string>();
   const favoriteLanguages = useFavoriteLanguages(settings);
   const search = useLinkSearch(

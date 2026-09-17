@@ -43,8 +43,12 @@ export type Settings = {
   ffmpegPath?: string;
   whisperPath?: string;
   modelPath?: string;
+  skipSilence?: boolean;
+  vadModelPath?: string;
   whisperLanguage?: string;
   favoriteLanguages?: string;
+  /** The extension's support folder, for files it downloads such as the VAD model. */
+  supportPath?: string;
 };
 
 export function youtubeId(input: string): string {

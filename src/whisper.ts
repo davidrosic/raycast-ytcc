@@ -1,10 +1,13 @@
+import { createHash } from "node:crypto";
 import {
   access,
   copyFile,
+  mkdir,
   mkdtemp,
   open,
   readdir,
   readFile,
+  rename,
   rm,
   writeFile,
 } from "node:fs/promises";
@@ -62,9 +65,72 @@ async function isWhisperWav(path: string): Promise<boolean> {
   }
 }
 
+type WhisperSetup = { whisper: string; model: string; vad?: string };
+
+/** Silero VAD v6.2.0 converted for whisper.cpp, from the ggml-org Hugging Face repository. */
+export const sileroModel = {
+  name: "ggml-silero-v6.2.0.bin",
+  url: "https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v6.2.0.bin",
+  sha256: "2aa269b785eeb53a82983a20501ddf7c1d9c48e33ab63a41391ac6c9f7fb6987",
+};
+
+async function readable(path: string): Promise<boolean> {
+  try {
+    await access(path, constants.R_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The Silero VAD model: the one set in preferences, one next to the whisper
+ * model, or a copy downloaded once into the extension's support folder.
+ */
+async function vadModel(
+  settings: Settings,
+  model: string,
+  onProgress?: (message: string) => void,
+): Promise<string> {
+  if (settings.vadModelPath) {
+    if (await readable(settings.vadModelPath)) return settings.vadModelPath;
+    throw new Error(
+      "The Silero VAD model was not found. Select it again in extension preferences.",
+    );
+  }
+  const beside = join(dirname(model), sileroModel.name);
+  if (await readable(beside)) return beside;
+  if (!settings.supportPath)
+    throw new Error("Select a Silero VAD model in extension preferences.");
+  const folder = join(settings.supportPath, "models");
+  const downloaded = join(folder, sileroModel.name);
+  if (await readable(downloaded)) return downloaded;
+  onProgress?.("Downloading Silero VAD model…");
+  let data: Buffer;
+  try {
+    const response = await fetch(sileroModel.url);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    data = Buffer.from(await response.arrayBuffer());
+  } catch (error) {
+    throw new Error(
+      `Could not download the Silero VAD model (${error instanceof Error ? error.message : String(error)}). Check your connection, or turn off Skip Silence in extension preferences.`,
+    );
+  }
+  if (createHash("sha256").update(data).digest("hex") !== sileroModel.sha256)
+    throw new Error(
+      "The downloaded Silero VAD model was damaged. Try again later.",
+    );
+  await mkdir(folder, { recursive: true });
+  const partial = `${downloaded}.${process.pid}.part`;
+  await writeFile(partial, data);
+  await rename(partial, downloaded);
+  return downloaded;
+}
+
 async function whisperSetup(
   settings: Settings,
-): Promise<{ whisper: string; model: string }> {
+  onProgress?: (message: string) => void,
+): Promise<WhisperSetup> {
   const whisper = await executable(settings.whisperPath, "whisper-cli");
   const model =
     settings.modelPath ||
@@ -84,7 +150,14 @@ async function whisperSetup(
       "ggml-large-v3-turbo.bin was not found. Select the model file in extension preferences.",
     );
   }
-  return { whisper, model };
+  return {
+    whisper,
+    model,
+    vad:
+      settings.skipSilence === false
+        ? undefined
+        : await vadModel(settings, model, onProgress),
+  };
 }
 
 /**
@@ -130,7 +203,7 @@ async function whisperAudio(
 
 /** Runs whisper-cli and returns the path the outputs were written to, without extension. */
 async function runWhisper(
-  { whisper, model }: { whisper: string; model: string },
+  { whisper, model, vad }: WhisperSetup,
   wav: string,
   language: string,
   outputs: string[],
@@ -139,25 +212,40 @@ async function runWhisper(
 ): Promise<string> {
   const result = join(temporary, "result");
   onProgress?.("Transcribing with large-v3-turbo…");
-  await run(
-    whisper,
-    [
-      "-m",
-      model,
-      "-f",
-      wav,
-      "-l",
-      language,
-      "--print-progress",
-      ...outputs.map((extension) => `--output-${extension}`),
-      "-of",
-      result,
-    ],
-    (line) => {
-      const match = /progress\s*=\s*(\d+)%/.exec(line);
-      if (match) onProgress?.(`Transcribing… ${match[1]}%`);
-    },
-  );
+  try {
+    await run(
+      whisper,
+      [
+        "-m",
+        model,
+        "-f",
+        wav,
+        "-l",
+        language,
+        ...(vad ? ["--vad", "--vad-model", vad] : []),
+        "--print-progress",
+        ...outputs.map((extension) => `--output-${extension}`),
+        "-of",
+        result,
+      ],
+      (line) => {
+        const match = /progress\s*=\s*(\d+)%/.exec(line);
+        if (match) onProgress?.(`Transcribing… ${match[1]}%`);
+      },
+    );
+  } catch (error) {
+    if (
+      vad &&
+      error instanceof Error &&
+      /unknown argument: --vad|failed to (initialize|open|compute) VAD/i.test(
+        error.message,
+      )
+    )
+      throw new Error(
+        "whisper.cpp couldn't run Silero VAD. Update whisper.cpp, or turn off Skip Silence in extension preferences.",
+      );
+    throw error;
+  }
   return result;
 }
 
@@ -175,7 +263,7 @@ export async function transcribeFile(
 ): Promise<string> {
   if (!localFileInfo(path)?.isFile)
     throw new Error(`${path} is not a file that can be read.`);
-  const setup = await whisperSetup(settings);
+  const setup = await whisperSetup(settings, onProgress);
   const temporary = await mkdtemp(join(tmpdir(), "raycast-whisper-"));
   try {
     const wav = await whisperAudio(path, temporary, settings, onProgress);
@@ -226,7 +314,7 @@ export async function transcribe(
     throw new Error(
       "This video has captions. Choose an available caption track to download.",
     );
-  const setup = await whisperSetup(settings);
+  const setup = await whisperSetup(settings, onProgress);
   const ytDlp = await executable(settings.ytDlpPath, "yt-dlp");
   const destination = await outputDirectory(settings);
   const temporary = await mkdtemp(join(tmpdir(), "raycast-whisper-"));

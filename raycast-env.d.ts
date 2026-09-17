@@ -18,6 +18,10 @@ type ExtensionPreferences = {
   "whisperPath"?: string,
   /** Large V3 Turbo Model - Path to ggml-large-v3-turbo.bin; auto-detected beside whisper.cpp when available */
   "modelPath"?: string,
+  /** Voice Activity Detection - Transcribe only the parts with speech. This stops whisper from inventing text during silence and music, and is faster. */
+  "skipSilence": boolean,
+  /** Silero VAD Model - Optional; ggml-silero-v6.2.0.bin (885 KB) is downloaded automatically when not set */
+  "vadModelPath"?: string,
   /** Transcription Language - Spoken language, for example Serbian or auto */
   "whisperLanguage": string,
   /** Favorite Caption Languages - Comma-separated language names or codes; case and '(orig)' are ignored (for example Serbian, English) */
