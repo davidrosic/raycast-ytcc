@@ -55,15 +55,15 @@ test("accepts YouTube links without a scheme", () => {
 
 test("detects pasted YouTube links but not typed characters", () => {
   const link = "https://youtu.be/jNQXAC9IVRw?si=abc";
-  assert.equal(core.pastedYoutubeLink("", link), link);
-  assert.equal(core.pastedYoutubeLink("", ` ${link}\n`), link);
-  assert.equal(core.pastedYoutubeLink(link.slice(0, -1), link), undefined);
-  assert.equal(core.pastedYoutubeLink("", "https://vimeo.com/1"), undefined);
+  assert.equal(core.pastedMediaLink("", link), link);
+  assert.equal(core.pastedMediaLink("", ` ${link}\n`), link);
+  assert.equal(core.pastedMediaLink(link.slice(0, -1), link), undefined);
+  assert.equal(core.pastedMediaLink("", "https://example.com/1"), undefined);
   const other = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
-  assert.equal(core.pastedYoutubeLink(link, other), other);
-  assert.equal(core.pastedYoutubeLink(link, link + other), other);
+  assert.equal(core.pastedMediaLink(link, other), other);
+  assert.equal(core.pastedMediaLink(link, link + other), other);
   assert.equal(
-    core.pastedYoutubeLink("https://youtu.be/", "https://youtu.be/jNQXAC9IVRw"),
+    core.pastedMediaLink("https://youtu.be/", "https://youtu.be/jNQXAC9IVRw"),
     "https://youtu.be/jNQXAC9IVRw",
   );
 });
@@ -445,11 +445,11 @@ test("recognizes playlist and channel links", () => {
     "https://www.youtube.com/@jawed",
   );
   assert.equal(
-    core.pastedYoutubeLink("", "https://www.youtube.com/@jawed"),
+    core.pastedMediaLink("", "https://www.youtube.com/@jawed"),
     "https://www.youtube.com/@jawed",
   );
   assert.equal(
-    core.pastedYoutubeLink(
+    core.pastedMediaLink(
       "https://www.youtube.com/@jawe",
       "https://www.youtube.com/@jawed",
     ),
@@ -574,5 +574,41 @@ test("summarizes a finished queue", () => {
       },
     ]),
     "Talks: subtitles for 2 of 3 videos saved",
+  );
+});
+
+test("recognizes links from other video sites", () => {
+  assert.equal(
+    core.videoSite("https://x.com/nasa/status/1234567890?s=20"),
+    "X",
+  );
+  assert.equal(core.videoSite("twitter.com/i/status/1"), "X");
+  assert.equal(core.videoSite("https://x.com/nasa"), undefined);
+  assert.equal(
+    core.videoSite("https://www.instagram.com/reel/Cop84x6u7CP/?igsh=1"),
+    "Instagram",
+  );
+  assert.equal(core.videoSite("instagram.com/p/BQ0eAlwhDrw"), "Instagram");
+  assert.equal(
+    core.videoSite("https://www.instagram.com/enbiggen/"),
+    undefined,
+  );
+  assert.equal(core.videoSite("https://vm.tiktok.com/ZMabc123/"), "TikTok");
+  assert.equal(core.videoSite("https://www.twitch.tv/shroud"), undefined);
+  assert.equal(
+    core.videoSite("https://www.bilibili.com/video/BV13x41117TL"),
+    "Bilibili",
+  );
+  assert.equal(core.videoSite("https://example.com/video.mp4"), undefined);
+  assert.equal(
+    core.mediaUrl("instagram.com/reel/abc/"),
+    "https://instagram.com/reel/abc/",
+  );
+  const reel = "https://www.instagram.com/reel/Cop84x6u7CP/";
+  assert.equal(core.pastedMediaLink("", reel), reel);
+  assert.equal(core.pastedMediaLink(reel.slice(0, -1), reel), undefined);
+  assert.equal(
+    core.pastedMediaLink("", "https://example.com/video"),
+    undefined,
   );
 });

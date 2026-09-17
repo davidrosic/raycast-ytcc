@@ -24,7 +24,7 @@ import {
   favoriteScore,
   formatSize,
   inspectMedia,
-  isYoutubeLink,
+  isMediaLink,
   languageLabel,
   localFileInfo,
   isCanceled,
@@ -69,7 +69,7 @@ export { runQueueWorker } from "./jobs";
 
 /** The video URL for search text that is a link, or undefined for filter text and unfinished links. */
 function typedLink(text: string): { isLink: boolean; url?: string } {
-  if (!/^[a-z][a-z\d+.-]*:\/\//i.test(text) && !isYoutubeLink(text))
+  if (!/^[a-z][a-z\d+.-]*:\/\//i.test(text) && !isMediaLink(text))
     return { isLink: false };
   try {
     return { isLink: true, url: mediaUrl(text) };
@@ -438,7 +438,7 @@ export default function Command() {
       searchBarPlaceholder={
         url
           ? "Filter languages, or paste another link or file path…"
-          : "Paste a YouTube link or a file path…"
+          : "Paste a YouTube, Instagram or X link, or a file path…"
       }
       searchBarAccessory={
         url && !filePath ? (
@@ -460,15 +460,13 @@ export default function Command() {
     >
       <List.EmptyView
         icon={url ? Icon.MagnifyingGlass : Icon.Link}
-        title={
-          url ? "No matching languages or formats" : "Paste a YouTube link"
-        }
+        title={url ? "No matching languages or formats" : "Paste a video link"}
         description={
           url
             ? "Clear the search to see everything, or paste another link."
             : updateNote
               ? `${updateNote} Press ↵ to update it.`
-              : "A YouTube link in your clipboard is searched when the command opens, and a pasted link is searched right away. Links from other sites: paste, then press Return. To transcribe an audio or video file, paste its full path."
+              : "YouTube, Instagram, X, TikTok and other video links load as soon as you paste them, or when a link is in your clipboard as the command opens. For other sites, paste the link and press Return. To transcribe an audio or video file, paste its full path."
         }
         actions={
           <ActionPanel>

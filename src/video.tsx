@@ -13,9 +13,9 @@ import {
   VideoPreview,
   fetchPreview,
   formatDuration,
-  isYoutubeLink,
+  isMediaLink,
   pastedFilePath,
-  pastedYoutubeLink,
+  pastedMediaLink,
   youtubeThumbnail,
 } from "./core";
 
@@ -175,7 +175,7 @@ export function useLinkSearch(
     Clipboard.readText().then(
       (clipboard) => {
         const link = clipboard?.trim();
-        if (!link || previous.current || !isYoutubeLink(link)) return;
+        if (!link || previous.current || !isMediaLink(link)) return;
         previous.current = link;
         setText(link);
         onLink(link);
@@ -193,7 +193,7 @@ export function useLinkSearch(
       onLink(link);
     },
     onChange(next: string) {
-      const link = pastedYoutubeLink(previous.current, next);
+      const link = pastedMediaLink(previous.current, next);
       const file = link ? undefined : pastedFilePath(previous.current, next);
       previous.current = link ?? file ?? next;
       setText(previous.current);

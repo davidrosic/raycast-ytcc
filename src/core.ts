@@ -147,19 +147,86 @@ export function isYoutubeLink(input: string): boolean {
   return isYoutubeUrl(input) || Boolean(youtubeCollectionUrl(input));
 }
 
+/**
+ * Popular sites yt-dlp downloads video and audio from. Their links load as
+ * soon as they're pasted, like YouTube links; links to other sites load when
+ * you press Return, since they may not have a video.
+ */
+const videoSites: [string, string[], RegExp?][] = [
+  ["Instagram", ["instagram.com"], /^\/(?:[\w.]+\/)?(?:p|reels?|tv|stories)\//],
+  ["X", ["x.com", "twitter.com"], /\/status(?:es)?\/\d+/],
+  ["TikTok", ["vm.tiktok.com", "vt.tiktok.com"]],
+  ["TikTok", ["tiktok.com"], /\/(?:video|photo|t)\//],
+  ["Facebook", ["fb.watch"]],
+  ["Facebook", ["facebook.com"], /\/(?:watch|videos?|reels?|share)\b/],
+  ["Threads", ["threads.net", "threads.com"], /\/post\//],
+  ["Bluesky", ["bsky.app"], /\/post\//],
+  ["Reddit", ["v.redd.it"]],
+  ["Reddit", ["reddit.com"], /\/comments\/|\/s\//],
+  ["Twitch", ["clips.twitch.tv"]],
+  ["Twitch", ["twitch.tv"], /\/(?:videos|clip)\//],
+  ["Kick", ["kick.com"]],
+  ["Bilibili", ["bilibili.com", "b23.tv"]],
+  ["Vimeo", ["vimeo.com"]],
+  ["Dailymotion", ["dailymotion.com", "dai.ly"]],
+  ["SoundCloud", ["soundcloud.com"]],
+  ["Bandcamp", ["bandcamp.com"]],
+  ["Mixcloud", ["mixcloud.com"]],
+  ["Streamable", ["streamable.com"]],
+  ["Rumble", ["rumble.com"]],
+  ["Pinterest", ["pinterest.com", "pin.it"]],
+  ["Tumblr", ["tumblr.com"]],
+  ["LinkedIn", ["linkedin.com"]],
+  ["Snapchat", ["snapchat.com"]],
+  ["Loom", ["loom.com"]],
+  ["TED", ["ted.com"]],
+  ["Internet Archive", ["archive.org"]],
+  ["VK", ["vk.com", "vkvideo.ru"]],
+  ["Niconico", ["nicovideo.jp"]],
+  ["Weibo", ["weibo.com"]],
+  ["Douyin", ["douyin.com"]],
+];
+
+/** The name of a known video site for a link with a path, such as `Instagram`. */
+export function videoSite(input: string): string | undefined {
+  const url = parseLink(input);
+  if (
+    !url ||
+    !["https:", "http:"].includes(url.protocol) ||
+    /\s/.test(input.trim()) ||
+    url.pathname.length < 2
+  )
+    return undefined;
+  const host = url.hostname.toLowerCase();
+  return videoSites.find(
+    ([, domains, content]) =>
+      domains.some(
+        (domain) => host === domain || host.endsWith(`.${domain}`),
+      ) &&
+      (!content || content.test(url.pathname)),
+  )?.[0];
+}
+
+/** A link that loads as soon as it's pasted: YouTube, or a known video site. */
+export function isMediaLink(input: string): boolean {
+  return isYoutubeLink(input) || Boolean(videoSite(input));
+}
+
 export function mediaUrl(input: string): string {
   if (isYoutubeUrl(input)) return youtubeUrl(input);
   const collection = youtubeCollectionUrl(input);
   if (collection) return collection;
-  let url: URL;
+  const url = videoSite(input) ? parseLink(input) : undefined;
+  if (url) return url.toString();
+  let parsed: URL;
   try {
-    url = new URL(input.trim());
+    parsed = new URL(input.trim());
   } catch {
     throw new Error("Enter a valid video URL.");
   }
-  if (!["https:", "http:"].includes(url.protocol))
+  if (!["https:", "http:"].includes(parsed.protocol))
     throw new Error("Enter an HTTP or HTTPS video URL.");
-  return url.toString();
+  return parsed.toString();
 }
 
 /** The text that changed between two values of a text field. */
@@ -181,8 +248,8 @@ function insertedText(previous: string, next: string): string {
   return next.slice(start, next.length - end);
 }
 
-/** Returns the YouTube link a paste produced, or undefined for typing and edits. */
-export function pastedYoutubeLink(
+/** Returns the video link a paste produced, or undefined for typing and edits. */
+export function pastedMediaLink(
   previous: string,
   next: string,
 ): string | undefined {
@@ -190,7 +257,10 @@ export function pastedYoutubeLink(
   const value = next.trim();
   if (pasted.length < 2) return undefined;
   const key = (input: string) =>
-    isYoutubeUrl(input) ? youtubeId(input) : youtubeCollectionUrl(input);
+    isYoutubeUrl(input)
+      ? youtubeId(input)
+      : (youtubeCollectionUrl(input) ??
+        (videoSite(input) ? mediaUrl(input) : undefined));
   if (key(pasted)) return key(value) === key(pasted) ? value : pasted;
   return key(value) ? value : undefined;
 }
