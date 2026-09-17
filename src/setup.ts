@@ -69,8 +69,14 @@ async function toolVersion(
   return cellarVersion(realpathSync(path));
 }
 
-/** Where each tool is installed and its version, or no path when it's missing. */
-export async function toolStatus(settings: Settings): Promise<ToolStatus[]> {
+/**
+ * Where each tool is installed and, unless `versions` is false, its version.
+ * Missing tools have no path.
+ */
+export async function toolStatus(
+  settings: Settings,
+  { versions = true }: { versions?: boolean } = {},
+): Promise<ToolStatus[]> {
   return await Promise.all(
     tools.map(async (tool) => {
       try {
@@ -79,7 +85,11 @@ export async function toolStatus(settings: Settings): Promise<ToolStatus[]> {
           typeof configured === "string" ? configured : undefined,
           tool.binary,
         );
-        return { ...tool, path, version: await toolVersion(tool, path) };
+        return {
+          ...tool,
+          path,
+          version: versions ? await toolVersion(tool, path) : undefined,
+        };
       } catch {
         return tool;
       }

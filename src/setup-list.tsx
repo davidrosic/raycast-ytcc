@@ -26,7 +26,7 @@ const homebrewInstall =
 export function useMissingTools(settings: Settings, names: string[]) {
   const [missing, setMissing] = useState<ToolStatus[]>([]);
   useEffect(() => {
-    toolStatus(settings).then(
+    toolStatus(settings, { versions: false }).then(
       (status) =>
         setMissing(
           status.filter((tool) => names.includes(tool.name) && !tool.path),
