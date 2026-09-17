@@ -16,9 +16,11 @@ type ExtensionPreferences = {
   "ffmpegPath"?: string,
   /** Browser Sign-In - Off by default. Choose the browser you're signed in with to download age-restricted, private and members-only YouTube videos, and posts on Instagram, X and other sites that need an account. yt-dlp reads that browser's cookies on your Mac; they are never sent anywhere else. */
   "browserCookies": "none" | "safari" | "chrome" | "firefox" | "brave" | "edge" | "chromium" | "opera" | "vivaldi",
+  /** Browser Tab - When no video link is in your clipboard, Download Video opens the video in the browser tab you were watching. macOS asks once to let Raycast read the tab's address. */
+  "browserTab": boolean,
   /** whisper.cpp CLI - Path to whisper-cli; auto-detected in ~/GitHub/whisper.cpp when available */
   "whisperPath"?: string,
-  /** Default Whisper Model - Path to a ggml model, such as ggml-large-v3-turbo.bin; found next to whisper.cpp when not set. Other models in the same folder can be chosen when transcribing. */
+  /** Default Whisper Model - Optional; a ggml model such as ggml-large-v3-turbo.bin. When not set, the default chosen in Manage Tools and Models is used. Other models in the same folder can be chosen when transcribing. */
   "modelPath"?: string,
   /** Voice Activity Detection - Transcribe only the parts with speech. This stops whisper from inventing text during silence and music, and is faster. */
   "skipSilence": boolean,
@@ -42,6 +44,8 @@ declare namespace Preferences {
   export type TranscribeSelectedFiles = ExtensionPreferences & {}
   /** Preferences accessible in the `transcription-queue` command */
   export type TranscriptionQueue = ExtensionPreferences & {}
+  /** Preferences accessible in the `manage-tools-and-models` command */
+  export type ManageToolsAndModels = ExtensionPreferences & {}
   /** Preferences accessible in the `queue-menu-bar` command */
   export type QueueMenuBar = ExtensionPreferences & {}
 }
@@ -53,6 +57,8 @@ declare namespace Arguments {
   export type TranscribeSelectedFiles = {}
   /** Arguments passed to the `transcription-queue` command */
   export type TranscriptionQueue = {}
+  /** Arguments passed to the `manage-tools-and-models` command */
+  export type ManageToolsAndModels = {}
   /** Arguments passed to the `queue-menu-bar` command */
   export type QueueMenuBar = {}
 }
