@@ -18,8 +18,8 @@ function runVisualizer() {
   const screen = $.NSScreen.mainScreen;
   if (!screen) return;
 
-  const width = 210;
-  const height = 64;
+  const width = 160;
+  const height = 70;
   const visible = screen.visibleFrame;
   const x = Number(visible.origin.x) + (Number(visible.size.width) - width) / 2;
   const y = Number(visible.origin.y) + 54;
@@ -48,6 +48,17 @@ function runVisualizer() {
     (left, right) =>
       Math.abs(right - middle) - Math.abs(left - middle),
   );
+  const edgeBands = [
+    { from: 0, to: 1, opacity: 0 },
+    { from: 1, to: 2, opacity: 0.03 },
+    { from: 2, to: 3, opacity: 0.12 },
+    { from: 3, to: 5, opacity: 0.4 },
+    { from: 5, to: 58, opacity: 1, glow: true },
+    { from: 58, to: 60, opacity: 0.4 },
+    { from: 60, to: 61, opacity: 0.12 },
+    { from: 61, to: 62, opacity: 0.03 },
+    { from: 62, to: 63, opacity: 0 },
+  ];
   let visualizerLevel = 0;
   let visualizerProcessing = false;
 
@@ -70,14 +81,9 @@ function runVisualizer() {
             ? 0.18 + mix * 0.1
             : 0.3 + mix * 0.55;
           const blue = 1;
-          const color = $.NSColor.colorWithCalibratedRedGreenBlueAlpha(
-            red,
-            green,
-            blue,
-            0.18 + (1 - distance) * 0.42,
-          );
-          const path = $.NSBezierPath.bezierPath;
-          path.setLineWidth(index === middle ? 1.35 : 0.58);
+          const baseAlpha = 0.18 + (1 - distance) * 0.42;
+          const amplitude = 1.5 + energy * 16;
+          const positions = [];
           for (let point = 0; point < pointCount; point += 1) {
             const progress = point / (pointCount - 1);
             const envelope = Math.pow(Math.sin(Math.PI * progress), 0.82);
@@ -88,37 +94,95 @@ function runVisualizer() {
               progress * Math.PI * 10.4 - phase * 0.62 + depth * 1.1,
             );
             const drift = Math.sin(progress * Math.PI * 3.1 - phase * 0.34);
-            const amplitude = 1.5 + energy * 16;
             const wave =
               primary * 0.73 + detail * 0.27 + depth * drift * 0.28;
-            const position = $.NSMakePoint(
-              4 + progress * (width - 8),
+            const yPosition =
               height / 2 +
-                envelope *
-                  (amplitude * wave + depth * (2 + energy * 7.5)),
-            );
-            if (point === 0) path.moveToPoint(position);
-            else path.lineToPoint(position);
+              envelope * (amplitude * wave + depth * (2 + energy * 7.5));
+            positions.push({
+              point: $.NSMakePoint(3 + progress * (width - 6), yPosition),
+              progress,
+              y: yPosition,
+            });
           }
 
-          $.NSGraphicsContext.saveGraphicsState;
+          for (const band of edgeBands) {
+            const path = $.NSBezierPath.bezierPath;
+            path.setLineWidth(index === middle ? 1.35 : 0.58);
+            path.setLineCapStyle($.NSRoundLineCapStyle);
+            for (let point = band.from; point <= band.to; point += 1) {
+              if (point === band.from) path.moveToPoint(positions[point].point);
+              else path.lineToPoint(positions[point].point);
+            }
+
+            $.NSGraphicsContext.saveGraphicsState;
+            if (band.glow && Math.abs(index - middle) <= 1) {
+              const shadow = $.NSShadow.alloc.init;
+              shadow.setShadowColor(
+                $.NSColor.colorWithCalibratedRedGreenBlueAlpha(
+                  red,
+                  green,
+                  blue,
+                  index === middle ? 0.95 : 0.32,
+                ),
+              );
+              shadow.setShadowBlurRadius(index === middle ? 8 : 3.5);
+              shadow.setShadowOffset($.NSMakeSize(0, 0));
+              shadow.set;
+            }
+            $.NSColor.colorWithCalibratedRedGreenBlueAlpha(
+              red,
+              green,
+              blue,
+              baseAlpha * band.opacity,
+            ).setStroke;
+            path.stroke;
+            $.NSGraphicsContext.restoreGraphicsState;
+          }
+
           if (Math.abs(index - middle) <= 1) {
-            const shadow = $.NSShadow.alloc.init;
-            shadow.setShadowColor(
+            const highlight = $.NSBezierPath.bezierPath;
+            highlight.setLineWidth(index === middle ? 1.7 : 0.85);
+            highlight.setLineCapStyle($.NSRoundLineCapStyle);
+            let highlighting = false;
+            for (let point = 1; point < positions.length; point += 1) {
+              const current = positions[point];
+              const center = 1 - Math.abs(current.progress - 0.5) * 2;
+              const peak = Math.abs(current.y - height / 2) / (amplitude + 8);
+              const shouldGlow =
+                current.progress > 0.06 &&
+                current.progress < 0.94 &&
+                (center > 0.62 || peak > 0.58);
+              if (shouldGlow) {
+                if (!highlighting)
+                  highlight.moveToPoint(positions[point - 1].point);
+                highlight.lineToPoint(current.point);
+              }
+              highlighting = shouldGlow;
+            }
+
+            $.NSGraphicsContext.saveGraphicsState;
+            const highlightShadow = $.NSShadow.alloc.init;
+            highlightShadow.setShadowColor(
               $.NSColor.colorWithCalibratedRedGreenBlueAlpha(
                 red,
                 green,
                 blue,
-                index === middle ? 0.9 : 0.25,
+                index === middle ? 1 : 0.45,
               ),
             );
-            shadow.setShadowBlurRadius(index === middle ? 7 : 2.5);
-            shadow.setShadowOffset($.NSMakeSize(0, 0));
-            shadow.set;
+            highlightShadow.setShadowBlurRadius(index === middle ? 9 : 5);
+            highlightShadow.setShadowOffset($.NSMakeSize(0, 0));
+            highlightShadow.set;
+            $.NSColor.colorWithCalibratedRedGreenBlueAlpha(
+              red,
+              green,
+              blue,
+              index === middle ? 0.8 : 0.3,
+            ).setStroke;
+            highlight.stroke;
+            $.NSGraphicsContext.restoreGraphicsState;
           }
-          color.setStroke;
-          path.stroke;
-          $.NSGraphicsContext.restoreGraphicsState;
         }
       },
     },
