@@ -365,7 +365,11 @@ async function whisperAudio(
 async function runWhisper(
   { whisper, model, vad }: WhisperSetup,
   wav: string,
-  { language, translate }: Pick<TranscriptionOptions, "language" | "translate">,
+  {
+    language,
+    translate,
+    vadSpeechPadMs,
+  }: Pick<TranscriptionOptions, "language" | "translate" | "vadSpeechPadMs">,
   outputs: string[],
   temporary: string,
   onProgress?: (message: string) => void,
@@ -387,6 +391,9 @@ async function runWhisper(
         language,
         ...(translate ? ["--translate"] : []),
         ...(vad ? ["--vad", "--vad-model", vad] : []),
+        ...(vad && vadSpeechPadMs
+          ? ["--vad-speech-pad-ms", String(vadSpeechPadMs)]
+          : []),
         "--print-progress",
         ...outputs.map((extension) => `--output-${extension}`),
         "-of",
@@ -432,7 +439,20 @@ export type TranscriptionOptions = {
   model?: string;
   /** Translate the speech to English instead of transcribing it. */
   translate?: boolean;
+  /** Extra speech kept around Silero VAD segments, for short recordings such as dictation. */
+  vadSpeechPadMs?: number;
 };
+
+/** Turns whisper.cpp's line-per-segment TXT output into text suitable for inserting at a cursor. */
+export function cleanWhisperText(output: string): string {
+  return output
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
 /** Turbo models were not trained to translate and answer in the spoken language instead. */
 export function canTranslate(model: string): boolean {
@@ -551,6 +571,49 @@ export async function transcribeFile(
       onProgress,
       signal,
     );
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
+}
+
+/** Transcribes one short recording and returns clean text without saving a transcript. */
+export async function transcribeToText(
+  path: string,
+  options: Pick<TranscriptionOptions, "language" | "model" | "vadSpeechPadMs">,
+  settings: Settings,
+  onProgress?: (message: string) => void,
+  signal?: AbortSignal,
+): Promise<string> {
+  if (!localFileInfo(path)?.isFile)
+    throw new Error(`${path} is not a file that can be read.`);
+  const transcription = { ...options, format: "txt" as const };
+  const setup = await prepare(transcription, settings, onProgress, signal);
+  const temporary = await mkdtemp(join(tmpdir(), "raycast-dictation-"));
+  try {
+    const wav = await whisperAudio(
+      path,
+      temporary,
+      settings,
+      onProgress,
+      signal,
+    );
+    const result = await runWhisper(
+      setup,
+      wav,
+      transcription,
+      ["txt"],
+      temporary,
+      onProgress,
+      signal,
+    );
+    const text = cleanWhisperText(await readFile(`${result}.txt`, "utf8"));
+    if (!text)
+      throw new Error(
+        setup.vad
+          ? "No speech was found. The recording may be only music or silence."
+          : "No speech was found.",
+      );
+    return text;
   } finally {
     await rm(temporary, { recursive: true, force: true });
   }

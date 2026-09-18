@@ -11,7 +11,7 @@ const compiled = join(temporary, "core.cjs");
 require("esbuild").buildSync({
   stdin: {
     contents:
-      'export * from "./src/core"; export * from "./src/whisper"; export * from "./src/updates"; export * from "./src/playlists"; export { queueSummary } from "./src/jobs"; export * from "./src/models"; export * from "./src/setup";',
+      'export * from "./src/core"; export * from "./src/whisper"; export * from "./src/dictation"; export * from "./src/updates"; export * from "./src/playlists"; export { queueSummary } from "./src/jobs"; export * from "./src/models"; export * from "./src/setup";',
     resolveDir: process.cwd(),
     loader: "ts",
   },
@@ -110,6 +110,54 @@ test("recognizes WAV files whisper.cpp can read without conversion", () => {
   assert.equal(core.isWhisperWavHeader(wav(2, 16000, 16)), false);
   assert.equal(core.isWhisperWavHeader(wav(1, 44100, 16)), false);
   assert.equal(core.isWhisperWavHeader(Buffer.from("ID3 not a wav")), false);
+});
+
+test("parses AVFoundation audio inputs without including video devices", () => {
+  const output = [
+    "[AVFoundation indev @ 0x1] AVFoundation video devices:",
+    "[AVFoundation indev @ 0x1] [0] FaceTime HD Camera",
+    "[AVFoundation indev @ 0x1] [1] Capture screen 0",
+    "[AVFoundation indev @ 0x1] AVFoundation audio devices:",
+    "[AVFoundation indev @ 0x1] [0] MacBook Air Microphone",
+    "[AVFoundation indev @ 0x1] [12] Studio Display Microphone",
+    "[in#0 @ 0x2] Error opening input: Input/output error",
+  ].join("\n");
+
+  assert.deepEqual(core.parseAudioInputDevices(output), [
+    { index: 0, name: "MacBook Air Microphone" },
+    { index: 12, name: "Studio Display Microphone" },
+  ]);
+});
+
+test("cleans whisper text for insertion", () => {
+  assert.equal(
+    core.cleanWhisperText("  Hello there.  \r\n\r\n  This   is dictation. \n"),
+    "Hello there. This is dictation.",
+  );
+  assert.equal(core.cleanWhisperText(" \n\t\r\n"), "");
+});
+
+test("preserves selected text when appending dictation", () => {
+  assert.equal(
+    core.textForInsertion("dictated words", "Keep this selection"),
+    "Keep this selection dictated words",
+  );
+  assert.equal(
+    core.textForInsertion("next", "Already spaced "),
+    "Already spaced next",
+  );
+  assert.equal(
+    core.textForInsertion(", continued", "Keep this"),
+    "Keep this, continued",
+  );
+  assert.equal(core.textForInsertion("only dictation"), "only dictation");
+});
+
+test("maps microphone loudness to visualizer levels", () => {
+  assert.equal(core.normalizedAudioLevel(-Infinity), 0);
+  assert.equal(core.normalizedAudioLevel(-55), 0);
+  assert.equal(core.normalizedAudioLevel(-10), 1);
+  assert.ok(core.normalizedAudioLevel(-30) > 0.5);
 });
 
 test("lists whisper.cpp languages and formats file sizes", () => {
