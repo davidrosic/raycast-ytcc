@@ -1,6 +1,6 @@
 # Video Downloads & Transcription
 
-Save YouTube subtitles in any available language as RAW text, clean text, SRT or VTT, for one video or a whole playlist or channel. Download audio or video from YouTube, Instagram, X, TikTok and [hundreds of other sites](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md). Transcribe or translate videos without subtitles, or any audio or video file on your Mac, with [whisper.cpp](https://github.com/ggml-org/whisper.cpp).
+Save YouTube subtitles in any available language as RAW text, clean text, SRT or VTT, for one video or a whole playlist or channel. Download audio or video from YouTube, Instagram, X, TikTok and [hundreds of other sites](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md). Transcribe or translate videos without subtitles, or any audio or video file on your Mac, with [whisper.cpp](https://github.com/ggml-org/whisper.cpp). Hold a hotkey to dictate locally into any app.
 
 - **Copy a link, open the command.** A YouTube, Instagram or X link in your clipboard loads right away, with no extra steps. With no link in the clipboard, the video open in your browser loads instead.
 - **See what you're downloading.** The video's thumbnail and title appear as soon as the link is recognized.
@@ -10,6 +10,7 @@ Save YouTube subtitles in any available language as RAW text, clean text, SRT or
 - **Audio and video from most sites.** Save MP3, M4A or MP4 in the best available quality, including every video in an X post or Instagram carousel.
 - **Photos from Instagram and X.** Save every photo in a post at full resolution.
 - **Transcribe your own files.** Select recordings or folders in Finder, pick the language, output and model, and press ⌘↵.
+- **Hold to talk anywhere.** Hold a hotkey, speak while the floating waveform follows your voice, then release to insert locally transcribed text at the cursor without removing what is already there.
 - **Keeps running when Raycast closes.** Audio and video downloads, playlist downloads and transcriptions run in a background queue, with progress in the menu bar and a Cancel action.
 - **No invented text in silence.** Silero voice activity detection skips silence and music, which stops whisper from repeating made-up lines.
 - **Local transcription.** Audio is never uploaded to a transcription service.
@@ -40,6 +41,8 @@ The extension finds tools in your `PATH`, `/opt/homebrew/bin`, `/usr/local/bin`,
 | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
 | **Download Video**            | Subtitles, audio and video for a YouTube video, playlist or channel, audio and video from other sites, or a pasted file path |
 | **Transcribe Selected Files** | Transcribes the files or folders selected in Finder                                                                          |
+| **Dictate**                   | Records while its hotkey is held, then inserts the local transcription at the cursor                                         |
+| **Configure Dictation**       | Chooses the dictation model, microphone and spoken language                                                                  |
 | **Manage Tools and Models**   | Installs yt-dlp, ffmpeg and whisper.cpp, and downloads whisper models                                                        |
 | **Queue**                     | Running, queued and finished downloads and transcriptions, with Cancel and results                                           |
 | **Queue in Menu Bar**         | Shows progress in the menu bar while the queue is running                                                                    |
@@ -80,6 +83,28 @@ This works in Safari, Chrome, Arc, Brave, Edge, Vivaldi, Opera, Dia and other Ch
 - **Other video sites:** posts, reels and videos from Instagram, X (Twitter), TikTok, Facebook, Threads, Bluesky, Reddit, Twitch, Kick, Bilibili, Vimeo, Dailymotion, SoundCloud, Bandcamp and other popular sites load as soon as you paste them, like YouTube links. Profile and home pages don't.
 
 Links typed by hand, and links to any other site [supported by yt-dlp](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md), show **Search This Link**. Press ↵ to load them.
+
+## Dictation
+
+**Dictate** is a local hold-to-talk command inspired by the familiar press, speak and release workflow. It records from your microphone while its hotkey is held, transcribes the completed utterance after you release it, and inserts the result at the active cursor. Existing text stays in place; if text is selected, its plain text is kept and the dictation is added after it.
+
+### Set it up
+
+1. Install ffmpeg and whisper.cpp, then download a model in **Manage Tools and Models**.
+2. Open **Configure Dictation**. Choose a model, **System Default** or a connected microphone, and a spoken language or **Detect Automatically**. The dictation model is separate from the model used for files and downloaded videos.
+3. Open Raycast Settings → Extensions, select **Dictate**, and record a hotkey.
+
+Opening **Dictate** with Return instead of a held hotkey shows a setup prompt. Choose **Open Command Settings** to assign or change its shortcut without starting the microphone.
+
+To use Caps Lock as a Super button, open Raycast Settings → Keyboard → Hyper Key and set it to **Caps Lock**. Then assign a Hyper shortcut such as Hyper-D to **Dictate**. It can sit alongside existing Caps Lock-J, K, L or arrow shortcuts.
+
+### Use it
+
+1. Put the cursor where the text should appear.
+2. Press and keep holding the **Dictate** hotkey. Start speaking when the floating waveform appears; it moves with the microphone level.
+3. Release the hotkey. The waveform switches to a processing pulse while the full utterance is transcribed, then closes when the text is inserted. Press Escape while recording to cancel instead.
+
+`large-v3-turbo` is a good balance of accuracy and speed. With **Voice Activity Detection** on, as it is by default, Silero VAD removes silence before whisper processes the recording. Recording, voice detection and transcription all happen on your Mac, and the temporary recording is removed afterward.
 
 ## Subtitles
 
@@ -268,6 +293,12 @@ Some videos only play when you're signed in: age-restricted, private and members
 
 **"No speech was found".** The recording has only music, sound effects or silence, so there is nothing to transcribe.
 
+**Dictate asks for a hotkey.** Choose **Open Command Settings** in the prompt and assign a shortcut. Opening **Dictate** with Return never starts the microphone; hold its shortcut to record.
+
+**Dictate cannot use the microphone.** Allow Raycast under System Settings → Privacy & Security → Microphone. To use another input, select it in **Configure Dictation**; **System Default** follows the input selected in System Settings → Sound → Input.
+
+**Dictate keeps listening after the hotkey is released.** Hotkey release detection is best effort. Press Escape to cancel, then try a shortcut with a modifier or a Caps Lock Hyper Key and keep it held until the floating waveform appears.
+
 **"HTTP Error 429" on automatic captions.** YouTube is rate limiting requests, which happens most with automatic translations. The extension retries once after 60 seconds. If it still fails, wait a few minutes, or use a creator track or the original-language track.
 
 **The transcript repeats one line, or has text where nobody speaks.** Make sure **Voice Activity Detection** is on.
@@ -295,7 +326,7 @@ With **Browser Tab** on, the extension reads the address of your browser's curre
 - Hugging Face, to download the Silero VAD model once, and the whisper models and Core ML encoders you choose.
 - Homebrew, when you install tools with it.
 
-Audio, video and transcripts never leave your computer. With Browser Sign-In on, yt-dlp reads your browser's cookies locally to talk to YouTube; they are not sent anywhere else.
+Audio, video and transcripts never leave your computer. Dictation recordings are temporary and removed after local transcription. With Browser Sign-In on, yt-dlp reads your browser's cookies locally to talk to YouTube; they are not sent anywhere else.
 
 ## Development
 

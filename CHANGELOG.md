@@ -8,5 +8,6 @@
 - Download subtitles, audio or video for a whole playlist or channel, skipping videos already saved
 - Transcribe and translate recordings with whisper.cpp on your Mac, with Silero voice activity detection
 - Transcribe files and folders selected in Finder, or any file path you paste
+- Dictate into any app with a hold-to-talk hotkey, a microphone-driven floating waveform, a separate local whisper model, microphone and language, and Silero voice activity detection
 - Run downloads and transcriptions in a background queue that keeps going when Raycast closes, with progress in the menu bar
 - Install yt-dlp, ffmpeg and whisper.cpp with Homebrew and download whisper models and their Core ML encoders in Manage Tools and Models
