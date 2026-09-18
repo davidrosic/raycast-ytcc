@@ -18,11 +18,11 @@ function runVisualizer() {
   const screen = $.NSScreen.mainScreen;
   if (!screen) return;
 
-  const width = 280;
-  const height = 92;
+  const width = 210;
+  const height = 64;
   const visible = screen.visibleFrame;
   const x = Number(visible.origin.x) + (Number(visible.size.width) - width) / 2;
-  const y = Number(visible.origin.y) + 48;
+  const y = Number(visible.origin.y) + 54;
   const panel = $.NSPanel.alloc.initWithContentRectStyleMaskBackingDefer(
     $.NSMakeRect(x, y, width, height),
     $.NSWindowStyleMaskBorderless,
@@ -40,7 +40,7 @@ function runVisualizer() {
       Number($.NSWindowCollectionBehaviorFullScreenAuxiliary),
   );
 
-  const traceCount = 15;
+  const traceCount = 5;
   const middle = (traceCount - 1) / 2;
   const traceOrder = [];
   for (let index = 0; index < traceCount; index += 1) traceOrder.push(index);
@@ -49,6 +49,7 @@ function runVisualizer() {
       Math.abs(right - middle) - Math.abs(left - middle),
   );
   let visualizerLevel = 0;
+  let visualizerProcessing = false;
 
   ObjC.registerSubclass({
     name: "RaycastDictationWaveformView",
@@ -57,19 +58,23 @@ function runVisualizer() {
       "drawRect:": function () {
         const energy = Math.pow(visualizerLevel, 0.58);
         const phase = Date.now() / 175;
-        const pointCount = 96;
+        const pointCount = 64;
         for (const index of traceOrder) {
           const distance = Math.abs(index - middle) / middle;
           const depth = (index - middle) / middle;
           const mix = index / (traceCount - 1);
-          const red = 0.36 - mix * 0.12;
-          const green = 0.3 + mix * 0.55;
+          const red = visualizerProcessing
+            ? 0.66 + mix * 0.1
+            : 0.36 - mix * 0.12;
+          const green = visualizerProcessing
+            ? 0.18 + mix * 0.1
+            : 0.3 + mix * 0.55;
           const blue = 1;
           const color = $.NSColor.colorWithCalibratedRedGreenBlueAlpha(
             red,
             green,
             blue,
-            0.14 + (1 - distance) * 0.38,
+            0.18 + (1 - distance) * 0.42,
           );
           const path = $.NSBezierPath.bezierPath;
           path.setLineWidth(index === middle ? 1.35 : 0.58);
@@ -83,14 +88,14 @@ function runVisualizer() {
               progress * Math.PI * 10.4 - phase * 0.62 + depth * 1.1,
             );
             const drift = Math.sin(progress * Math.PI * 3.1 - phase * 0.34);
-            const amplitude = 2.2 + energy * 24;
+            const amplitude = 1.5 + energy * 16;
             const wave =
               primary * 0.73 + detail * 0.27 + depth * drift * 0.28;
             const position = $.NSMakePoint(
               4 + progress * (width - 8),
               height / 2 +
                 envelope *
-                  (amplitude * wave + depth * (3.5 + energy * 11.5)),
+                  (amplitude * wave + depth * (2 + energy * 7.5)),
             );
             if (point === 0) path.moveToPoint(position);
             else path.lineToPoint(position);
@@ -157,6 +162,11 @@ function runVisualizer() {
       if (line === "stop") {
         stopped = true;
         break;
+      }
+      if (line === "processing") {
+        visualizerProcessing = true;
+        draw(0.4);
+        continue;
       }
       draw(Number(line));
     }
@@ -226,6 +236,7 @@ export function startDictationVisualizer(): DictationVisualizer {
     level,
     processing() {
       if (animation) clearInterval(animation);
+      if (!closed && child.stdin.writable) child.stdin.write("processing\n");
       const started = Date.now();
       animation = setInterval(() => {
         const phase = (Date.now() - started) / 210;
