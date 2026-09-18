@@ -18,11 +18,11 @@ function runVisualizer() {
   const screen = $.NSScreen.mainScreen;
   if (!screen) return;
 
-  const width = 132;
-  const height = 46;
+  const width = 280;
+  const height = 92;
   const visible = screen.visibleFrame;
   const x = Number(visible.origin.x) + (Number(visible.size.width) - width) / 2;
-  const y = Number(visible.origin.y) + 54;
+  const y = Number(visible.origin.y) + 48;
   const panel = $.NSPanel.alloc.initWithContentRectStyleMaskBackingDefer(
     $.NSMakeRect(x, y, width, height),
     $.NSWindowStyleMaskBorderless,
@@ -31,7 +31,7 @@ function runVisualizer() {
   );
   panel.setOpaque(false);
   panel.setBackgroundColor($.NSColor.clearColor);
-  panel.setHasShadow(true);
+  panel.setHasShadow(false);
   panel.setHidesOnDeactivate(false);
   panel.setIgnoresMouseEvents(true);
   panel.setLevel($.NSStatusWindowLevel);
@@ -40,48 +40,99 @@ function runVisualizer() {
       Number($.NSWindowCollectionBehaviorFullScreenAuxiliary),
   );
 
-  const bubble = $.NSView.alloc.initWithFrame($.NSMakeRect(0, 0, width, height));
-  bubble.setWantsLayer(true);
-  bubble.layer.setCornerRadius(18);
-  bubble.layer.setBackgroundColor(
-    $.NSColor.colorWithCalibratedRedGreenBlueAlpha(0.075, 0.09, 0.14, 0.96).CGColor,
+  const traceCount = 15;
+  const middle = (traceCount - 1) / 2;
+  const traceOrder = [];
+  for (let index = 0; index < traceCount; index += 1) traceOrder.push(index);
+  traceOrder.sort(
+    (left, right) =>
+      Math.abs(right - middle) - Math.abs(left - middle),
   );
-  panel.setContentView(bubble);
+  let visualizerLevel = 0;
 
-  const weights = [0.45, 0.72, 0.92, 1, 0.86, 0.68, 0.42];
-  const bars = [];
-  const barWidth = 5;
-  const gap = 7;
-  const firstX = (width - (weights.length * barWidth + (weights.length - 1) * gap)) / 2;
-  for (let index = 0; index < weights.length; index += 1) {
-    const bar = $.NSView.alloc.initWithFrame(
-      $.NSMakeRect(firstX + index * (barWidth + gap), height / 2 - 2, barWidth, 4),
-    );
-    bar.setWantsLayer(true);
-    bar.layer.setCornerRadius(barWidth / 2);
-    bar.layer.setBackgroundColor(
-      $.NSColor.colorWithCalibratedRedGreenBlueAlpha(0.26, 0.87, 0.73, 1).CGColor,
-    );
-    bubble.addSubview(bar);
-    bars.push(bar);
-  }
+  ObjC.registerSubclass({
+    name: "RaycastDictationWaveformView",
+    superclass: "NSView",
+    methods: {
+      "drawRect:": function () {
+        const energy = Math.pow(visualizerLevel, 0.58);
+        const phase = Date.now() / 175;
+        const pointCount = 96;
+        for (const index of traceOrder) {
+          const distance = Math.abs(index - middle) / middle;
+          const depth = (index - middle) / middle;
+          const mix = index / (traceCount - 1);
+          const red = 0.36 - mix * 0.12;
+          const green = 0.3 + mix * 0.55;
+          const blue = 1;
+          const color = $.NSColor.colorWithCalibratedRedGreenBlueAlpha(
+            red,
+            green,
+            blue,
+            0.14 + (1 - distance) * 0.38,
+          );
+          const path = $.NSBezierPath.bezierPath;
+          path.setLineWidth(index === middle ? 1.35 : 0.58);
+          for (let point = 0; point < pointCount; point += 1) {
+            const progress = point / (pointCount - 1);
+            const envelope = Math.pow(Math.sin(Math.PI * progress), 0.82);
+            const primary = Math.sin(
+              progress * Math.PI * 5.2 + phase + depth * 0.48,
+            );
+            const detail = Math.sin(
+              progress * Math.PI * 10.4 - phase * 0.62 + depth * 1.1,
+            );
+            const drift = Math.sin(progress * Math.PI * 3.1 - phase * 0.34);
+            const amplitude = 2.2 + energy * 24;
+            const wave =
+              primary * 0.73 + detail * 0.27 + depth * drift * 0.28;
+            const position = $.NSMakePoint(
+              4 + progress * (width - 8),
+              height / 2 +
+                envelope *
+                  (amplitude * wave + depth * (3.5 + energy * 11.5)),
+            );
+            if (point === 0) path.moveToPoint(position);
+            else path.lineToPoint(position);
+          }
+
+          $.NSGraphicsContext.saveGraphicsState;
+          if (Math.abs(index - middle) <= 1) {
+            const shadow = $.NSShadow.alloc.init;
+            shadow.setShadowColor(
+              $.NSColor.colorWithCalibratedRedGreenBlueAlpha(
+                red,
+                green,
+                blue,
+                index === middle ? 0.9 : 0.25,
+              ),
+            );
+            shadow.setShadowBlurRadius(index === middle ? 7 : 2.5);
+            shadow.setShadowOffset($.NSMakeSize(0, 0));
+            shadow.set;
+          }
+          color.setStroke;
+          path.stroke;
+          $.NSGraphicsContext.restoreGraphicsState;
+        }
+      },
+    },
+  });
+
+  const canvas = $.RaycastDictationWaveformView.alloc.initWithFrame(
+    $.NSMakeRect(0, 0, width, height),
+  );
+  canvas.setWantsLayer(true);
+  canvas.layer.setBackgroundColor(
+    $.NSColor.colorWithCalibratedRedGreenBlueAlpha(0, 0, 0, 0.001).CGColor,
+  );
+  panel.setContentView(canvas);
 
   function draw(level) {
     const value = Math.max(0, Math.min(1, Number(level) || 0));
-    const time = Date.now() / 95;
-    for (let index = 0; index < bars.length; index += 1) {
-      const movement = 0.84 + 0.16 * Math.sin(time + index * 1.35);
-      const barHeight = 4 + value * 27 * weights[index] * movement;
-      bars[index].setFrame(
-        $.NSMakeRect(
-          firstX + index * (barWidth + gap),
-          (height - barHeight) / 2,
-          barWidth,
-          barHeight,
-        ),
-      );
-    }
-    bubble.displayIfNeeded;
+    visualizerLevel = value;
+    canvas.setNeedsDisplay(true);
+    canvas.display;
   }
 
   panel.orderFrontRegardless;
@@ -159,6 +210,8 @@ export function startDictationVisualizer(): DictationVisualizer {
     if (!readySettled && chunk.includes("raycast-visualizer-ready")) {
       readySettled = true;
       resolveReady(true);
+    } else if (!chunk.includes("raycast-visualizer-ready")) {
+      console.error(chunk.trim());
     }
   });
   child.stdin.on("error", () => undefined);
