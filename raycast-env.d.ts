@@ -42,6 +42,10 @@ declare namespace Preferences {
   export type DownloadVideo = ExtensionPreferences & {}
   /** Preferences accessible in the `transcribe-selected-files` command */
   export type TranscribeSelectedFiles = ExtensionPreferences & {}
+  /** Preferences accessible in the `dictate` command */
+  export type Dictate = ExtensionPreferences & {}
+  /** Preferences accessible in the `configure-dictation` command */
+  export type ConfigureDictation = ExtensionPreferences & {}
   /** Preferences accessible in the `transcription-queue` command */
   export type TranscriptionQueue = ExtensionPreferences & {}
   /** Preferences accessible in the `manage-tools-and-models` command */
@@ -55,6 +59,10 @@ declare namespace Arguments {
   export type DownloadVideo = {}
   /** Arguments passed to the `transcribe-selected-files` command */
   export type TranscribeSelectedFiles = {}
+  /** Arguments passed to the `dictate` command */
+  export type Dictate = {}
+  /** Arguments passed to the `configure-dictation` command */
+  export type ConfigureDictation = {}
   /** Arguments passed to the `transcription-queue` command */
   export type TranscriptionQueue = {}
   /** Arguments passed to the `manage-tools-and-models` command */

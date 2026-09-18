@@ -1,7 +1,7 @@
 {
   "name": "video-downloads-transcription",
   "title": "Video Downloads & Transcription",
-  "description": "Download audio and video from YouTube, Instagram, X and hundreds of other sites, save YouTube subtitles in any language, and transcribe or translate any recording locally with whisper.cpp",
+  "description": "Download audio and video from YouTube, Instagram, X and hundreds of sites, save subtitles, and dictate or transcribe locally with whisper.cpp",
   "icon": "icon.png",
   "author": "davidrosic",
   "license": "MIT",
@@ -25,6 +25,20 @@
       "title": "Transcribe Selected Files",
       "subtitle": "Finder · whisper.cpp",
       "description": "Transcribe or translate the audio and video files or folders selected in Finder with whisper.cpp",
+      "mode": "view"
+    },
+    {
+      "name": "dictate",
+      "title": "Dictate",
+      "subtitle": "Local whisper.cpp · hold to talk",
+      "description": "Hold its Raycast hotkey to dictate locally, then release to insert the text at the cursor",
+      "mode": "no-view"
+    },
+    {
+      "name": "configure-dictation",
+      "title": "Configure Dictation",
+      "subtitle": "Model, microphone & language",
+      "description": "Choose the separate whisper model, microphone and language used for local dictation",
       "mode": "view"
     },
     {

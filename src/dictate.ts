@@ -1,0 +1,136 @@
+import {
+  Clipboard,
+  Icon,
+  LocalStorage,
+  confirmAlert,
+  getSelectedText,
+  openCommandPreferences,
+  showHUD,
+} from "@raycast/api";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { defaultWhisperLanguage } from "./core";
+import {
+  MicrophoneRecording,
+  defaultMicrophone,
+  dictationStorage,
+  startMicrophoneRecording,
+  textForInsertion,
+  watchHotkey,
+} from "./dictation";
+import {
+  DictationVisualizer,
+  startDictationVisualizer,
+} from "./dictation-visualizer";
+import { preferences } from "./preferences";
+import { transcribeToText, whisperModels } from "./whisper";
+
+export { runQueueWorker } from "./jobs";
+
+function errorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  if (/not authorized|permission denied|operation not permitted/i.test(message))
+    return "Allow Raycast to use the microphone in System Settings → Privacy & Security → Microphone.";
+  if (/no microphones were found|input\/output error/i.test(message))
+    return "No microphone is available. Connect one or choose another in Configure Dictation.";
+  if (/ffmpeg could not record the microphone/i.test(message))
+    return "The microphone could not be started. Choose another in Configure Dictation, then try again.";
+  if (message === "Canceled") return "Dictation canceled";
+  return message;
+}
+
+export default async function Command() {
+  const settings = preferences();
+  const hotkey = watchHotkey();
+  let recording: MicrophoneRecording | undefined;
+  let visualizer: DictationVisualizer | undefined;
+  let temporary: string | undefined;
+
+  try {
+    if (!(await hotkey.held)) {
+      if (
+        await confirmAlert({
+          icon: Icon.Keyboard,
+          title: "Set Up the Dictate Hotkey",
+          message:
+            "Dictate records only while its shortcut is held. Assign a hotkey to this command, then hold it while speaking.",
+          primaryAction: { title: "Open Command Settings" },
+          dismissAction: { title: "Not Now" },
+        })
+      )
+        await openCommandPreferences();
+      return;
+    }
+
+    const selected = getSelectedText().catch(() => undefined);
+    const setup = Promise.all([
+      LocalStorage.getItem<string>(dictationStorage.model),
+      LocalStorage.getItem<string>(dictationStorage.language),
+      LocalStorage.getItem<string>("favoriteLanguages"),
+      whisperModels(settings),
+      selected,
+    ]);
+    void setup.catch(() => undefined);
+    const [microphone, folder] = await Promise.all([
+      LocalStorage.getItem<string>(dictationStorage.microphone),
+      mkdtemp(join(tmpdir(), "raycast-dictation-")),
+    ]);
+    temporary = folder;
+    const wav = join(temporary, "dictation.wav");
+    visualizer = startDictationVisualizer();
+    recording = await startMicrophoneRecording(
+      wav,
+      microphone ?? defaultMicrophone,
+      settings,
+      visualizer.level,
+    );
+
+    const end = await hotkey.ended;
+    await recording.stop();
+    recording = undefined;
+    if (end === "canceled") return;
+    visualizer.processing();
+
+    const [storedModel, storedLanguage, storedFavorites, installed, selection] =
+      await setup;
+    if (
+      storedModel &&
+      !installed.models.some((model) => model.path === storedModel)
+    )
+      throw new Error(
+        "The dictation model is no longer available. Choose another in Configure Dictation.",
+      );
+    const model = storedModel ?? installed.defaultModel;
+    if (!model)
+      throw new Error(
+        "No whisper model is installed. Download one in Manage Tools and Models.",
+      );
+    const language =
+      storedLanguage ??
+      defaultWhisperLanguage(
+        storedFavorites ?? settings.favoriteLanguages,
+        settings.whisperLanguage,
+      );
+    const text = await transcribeToText(
+      wav,
+      { language, model, vadSpeechPadMs: 250 },
+      settings,
+    );
+    await Clipboard.paste(textForInsertion(text, selection));
+    await visualizer.close();
+    visualizer = undefined;
+  } catch (error) {
+    await recording?.stop().catch(() => undefined);
+    await visualizer?.close();
+    visualizer = undefined;
+    await showHUD(errorMessage(error));
+  } finally {
+    hotkey.stop();
+    await visualizer?.close();
+    if (temporary)
+      await rm(temporary, { recursive: true, force: true }).catch(
+        () => undefined,
+      );
+  }
+}
