@@ -1,6 +1,7 @@
 import { createRequire } from "node:module";
 import {
   chmodSync,
+  existsSync,
   mkdtempSync,
   readFileSync,
   rmSync,
@@ -138,6 +139,77 @@ test("parses AVFoundation audio inputs without including video devices", () => {
     { index: 12, name: "Studio Display Microphone" },
   ]);
 });
+
+test("stops microphone recording immediately with SIGINT", async () => {
+  const folder = mkdtempSync(join(temporary, "fake-ffmpeg-"));
+  const ffmpeg = join(folder, "ffmpeg");
+  const wav = join(folder, "recording.wav");
+  writeFileSync(
+    ffmpeg,
+    String.raw`#!/usr/bin/env node
+const fs = require("node:fs");
+const target = process.argv.at(-1);
+fs.writeFileSync(target, Buffer.alloc(100));
+fs.writeFileSync(target + ".pid", String(process.pid));
+process.stdin.on("data", (chunk) => fs.appendFileSync(target + ".stdin", chunk));
+process.once("SIGINT", () => {
+  fs.writeFileSync(target + ".signal", "SIGINT");
+  process.exit(255);
+});
+process.stderr.write("Output #0\nPress [q] to stop\n");
+setInterval(() => {}, 1000);
+`,
+  );
+  chmodSync(ffmpeg, 0o755);
+  const recording = await core.startMicrophoneRecording(
+    wav,
+    core.defaultMicrophone,
+    { ffmpegPath: ffmpeg },
+  );
+  const pid = Number(readFileSync(`${wav}.pid`, "utf8"));
+  const started = Date.now();
+  await Promise.all([recording.stop(), recording.stop()]);
+  assert.ok(Date.now() - started < 750);
+  assert.equal(readFileSync(`${wav}.signal`, "utf8"), "SIGINT");
+  assert.equal(
+    existsSync(`${wav}.stdin`)
+      ? readFileSync(`${wav}.stdin`, "utf8").includes("q")
+      : false,
+    false,
+  );
+  await waitUntil(() => !pidExists(pid));
+});
+
+test(
+  "force kills a microphone recorder that ignores SIGINT",
+  { timeout: 4_000 },
+  async () => {
+    const folder = mkdtempSync(join(temporary, "stuck-ffmpeg-"));
+    const ffmpeg = join(folder, "ffmpeg");
+    const wav = join(folder, "recording.wav");
+    writeFileSync(
+      ffmpeg,
+      String.raw`#!/usr/bin/env node
+const fs = require("node:fs");
+const target = process.argv.at(-1);
+fs.writeFileSync(target, Buffer.alloc(100));
+fs.writeFileSync(target + ".pid", String(process.pid));
+process.on("SIGINT", () => {});
+process.stderr.write("Output #0\nPress [q] to stop\n");
+setInterval(() => {}, 1000);
+`,
+    );
+    chmodSync(ffmpeg, 0o755);
+    const recording = await core.startMicrophoneRecording(
+      wav,
+      core.defaultMicrophone,
+      { ffmpegPath: ffmpeg },
+    );
+    const pid = Number(readFileSync(`${wav}.pid`, "utf8"));
+    await assert.rejects(recording.stop(), /ffmpeg could not record/);
+    await waitUntil(() => !pidExists(pid));
+  },
+);
 
 test("cleans whisper text for insertion", () => {
   assert.equal(

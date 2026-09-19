@@ -97,7 +97,6 @@ export async function startMicrophoneRecording(
   let readyResolve: (() => void) | undefined;
   let readyReject: ((error: Error) => void) | undefined;
   let stderr = "";
-  let interrupt: ReturnType<typeof setTimeout> | undefined;
   let force: ReturnType<typeof setTimeout> | undefined;
   const child = spawn(
     ffmpeg,
@@ -157,7 +156,6 @@ export async function startMicrophoneRecording(
       reject(error);
     });
     child.once("close", (code, signal) => {
-      if (interrupt) clearTimeout(interrupt);
       if (force) clearTimeout(force);
       if (code === 0 || (stopping && code === 255) || signal === "SIGINT") {
         if (!ready)
@@ -177,9 +175,11 @@ export async function startMicrophoneRecording(
   const finishRecording = () => {
     if (stopping) return;
     stopping = true;
-    child.stdin.end("q\n");
-    interrupt = setTimeout(() => child.kill("SIGINT"), 1_500);
-    force = setTimeout(() => child.kill("SIGKILL"), 5_000);
+    child.stdin.end();
+    if (child.pid && child.exitCode === null && child.signalCode === null) {
+      child.kill("SIGINT");
+      force = setTimeout(() => child.kill("SIGKILL"), 1_500);
+    }
   };
   // A rejection before release is observed again from stop(), not as an unhandled promise.
   void finished.catch(() => undefined);
