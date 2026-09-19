@@ -49,7 +49,7 @@ function runVisualizer() {
       Math.abs(right - middle) - Math.abs(left - middle),
   );
   const pointCount = 64;
-  const falloffBandSize = 3;
+  const falloffBandSize = 4;
   let visualizerLevel = 0;
   let visualizerProcessing = false;
 
@@ -130,22 +130,18 @@ function runVisualizer() {
             }
 
             $.NSGraphicsContext.saveGraphicsState;
-            if (Math.abs(index - middle) <= 1) {
+            if (index === middle) {
               const shadow = $.NSShadow.alloc.init;
               shadow.setShadowColor(
                 $.NSColor.colorWithCalibratedRedGreenBlueAlpha(
                   red,
                   green,
                   blue,
-                  (index === middle ? 0.95 : 0.32) *
-                    falloff *
-                    (0.5 + 0.5 * peakBoost),
+                  0.95 * falloff * (0.5 + 0.5 * peakBoost),
                 ),
               );
               shadow.setShadowBlurRadius(
-                (index === middle
-                  ? 3 + 5 * falloff
-                  : 1.5 + 2 * falloff) *
+                (3 + 5 * falloff) *
                   (0.8 + 0.2 * peakBoost),
               );
               shadow.setShadowOffset($.NSMakeSize(0, 0));
@@ -205,6 +201,7 @@ function runVisualizer() {
     );
     const lines = pending.split("\n");
     pending = lines.pop() || "";
+    let nextLevel;
     for (const line of lines) {
       if (line === "stop") {
         stopped = true;
@@ -212,11 +209,12 @@ function runVisualizer() {
       }
       if (line === "processing") {
         visualizerProcessing = true;
-        draw(0.4);
+        nextLevel = 0.4;
         continue;
       }
-      draw(Number(line));
+      nextLevel = Number(line);
     }
+    if (!stopped && nextLevel !== undefined) draw(nextLevel);
     $.NSRunLoop.currentRunLoop.runUntilDate(
       $.NSDate.dateWithTimeIntervalSinceNow(0.008),
     );
