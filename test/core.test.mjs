@@ -1,9 +1,19 @@
 import { createRequire } from "node:module";
-import { mkdtempSync, rmSync } from "node:fs";
+import {
+  chmodSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { execFile, spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import test from "node:test";
 import assert from "node:assert/strict";
+
+const execFileAsync = promisify(execFile);
 
 const require = createRequire(import.meta.url);
 const temporary = mkdtempSync(join(tmpdir(), "raycast-core-test-"));
@@ -11,7 +21,7 @@ const compiled = join(temporary, "core.cjs");
 require("esbuild").buildSync({
   stdin: {
     contents:
-      'export * from "./src/core"; export * from "./src/whisper"; export * from "./src/dictation"; export * from "./src/updates"; export * from "./src/playlists"; export { queueSummary } from "./src/jobs"; export * from "./src/models"; export * from "./src/setup";',
+      'export * from "./src/core"; export * from "./src/whisper"; export * from "./src/whisper-server"; export * from "./src/dictation"; export * from "./src/updates"; export * from "./src/playlists"; export { queueSummary } from "./src/jobs"; export * from "./src/models"; export * from "./src/setup";',
     resolveDir: process.cwd(),
     loader: "ts",
   },
@@ -136,6 +146,326 @@ test("cleans whisper text for insertion", () => {
   );
   assert.equal(core.cleanWhisperText(" \n\t\r\n"), "");
 });
+
+test("keeps the warmed whisper server local and enables Silero VAD", () => {
+  const arguments_ = core.whisperServerArguments(
+    {
+      whisper: "/tools/whisper-cli",
+      model: "/models/ggml-large-v3-turbo.bin",
+      vad: "/models/ggml-silero.bin",
+    },
+    43210,
+    "/private-token",
+    "sr",
+    250,
+    "/private-empty-folder",
+  );
+  const value = (flag) => arguments_[arguments_.indexOf(flag) + 1];
+  assert.equal(value("--host"), "127.0.0.1");
+  assert.equal(value("--port"), "43210");
+  assert.equal(value("--request-path"), "/private-token");
+  assert.equal(value("--language"), "sr");
+  assert.equal(value("--best-of"), "5");
+  assert.equal(value("--beam-size"), "5");
+  assert.equal(value("--public"), "/private-empty-folder");
+  assert.equal(value("--vad-model"), "/models/ggml-silero.bin");
+  assert.equal(value("--vad-speech-pad-ms"), "250");
+  assert.equal(arguments_.includes("--convert"), false);
+});
+
+function fakeWhisperServer(mode = "normal") {
+  const folder = mkdtempSync(join(temporary, "fake-whisper-"));
+  const cli = join(folder, "whisper-cli");
+  const server = join(folder, "whisper-server");
+  const marker = join(folder, `${mode}.pid`);
+  const wav = join(folder, "dictation.wav");
+  writeFileSync(cli, "");
+  writeFileSync(
+    server,
+    String.raw`#!/usr/bin/env node
+const fs = require("node:fs");
+const http = require("node:http");
+const args = process.argv.slice(2);
+const value = (flag) => args[args.indexOf(flag) + 1];
+const port = Number(value("--port"));
+const host = value("--host");
+const prefix = value("--request-path");
+fs.writeFileSync(value("--model"), String(process.pid));
+const server = http.createServer((request, response) => {
+  if (request.method === "GET" && request.url === prefix + "/health") {
+    response.setHeader("content-type", "application/json");
+    if (value("--model").includes("never-ready")) {
+      response.statusCode = 503;
+      response.end('{"status":"loading model"}');
+    } else {
+      response.end('{"status":"ok"}');
+    }
+    return;
+  }
+  if (request.method === "POST" && request.url === prefix + "/inference") {
+    if (value("--model").includes("stalled-inference")) {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.write('{"text":');
+      return;
+    }
+    let bytes = 0;
+    request.on("data", (chunk) => { bytes += chunk.length; });
+    request.on("end", () => {
+      response.setHeader("content-type", "application/json");
+      response.end(bytes ? '{"text":"  warmed   dictation.\\n"}' : '{"error":"empty request"}');
+    });
+    return;
+  }
+  response.statusCode = 404;
+  response.end();
+});
+server.listen(port, host);
+const stop = () => server.close(() => process.exit(0));
+process.once("SIGINT", stop);
+if (value("--model").includes("ignore-termination"))
+  process.on("SIGTERM", () => {});
+else
+  process.once("SIGTERM", stop);
+`,
+  );
+  chmodSync(server, 0o755);
+  writeFileSync(wav, Buffer.alloc(32_044));
+  return { cli, marker, wav };
+}
+
+function pidExists(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function waitUntil(check, timeout = 5_000) {
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    if (await check()) return;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  assert.fail("Timed out waiting for child-process cleanup");
+}
+
+test("warms one local whisper server and closes it idempotently", async (t) => {
+  const fake = fakeWhisperServer();
+  const session = core.startWhisperServer(
+    { whisper: fake.cli, model: fake.marker },
+    "en",
+    250,
+    { startupTimeoutMs: 2_000, requestTimeoutMs: 2_000, pollIntervalMs: 10 },
+  );
+  assert.ok(session);
+  t.after(() => session.close());
+  await session.ready;
+  const pid = Number(readFileSync(fake.marker, "utf8"));
+  assert.equal(
+    await session.transcribe(fake.wav, "en", 250),
+    "warmed dictation.",
+  );
+  await Promise.all([session.close(), session.close()]);
+  await waitUntil(() => !pidExists(pid));
+});
+
+test("closes a warming server before it can spawn", async () => {
+  const fake = fakeWhisperServer();
+  const session = core.startWhisperServer(
+    { whisper: fake.cli, model: fake.marker },
+    "en",
+  );
+  assert.ok(session);
+  await session.close();
+  await assert.rejects(session.ready, /Canceled/);
+});
+
+test(
+  "force kills a whisper server that ignores graceful shutdown",
+  { timeout: 5_000 },
+  async () => {
+    const fake = fakeWhisperServer("ignore-termination");
+    const session = core.startWhisperServer(
+      { whisper: fake.cli, model: fake.marker },
+      "en",
+      250,
+      { startupTimeoutMs: 2_000, pollIntervalMs: 10 },
+    );
+    assert.ok(session);
+    await session.ready;
+    const pid = Number(readFileSync(fake.marker, "utf8"));
+    await session.close();
+    await waitUntil(() => !pidExists(pid));
+  },
+);
+
+test("stops a server whose model never becomes ready", async () => {
+  const fake = fakeWhisperServer("never-ready");
+  const session = core.startWhisperServer(
+    { whisper: fake.cli, model: fake.marker },
+    "en",
+    250,
+    { startupTimeoutMs: 100, pollIntervalMs: 10 },
+  );
+  assert.ok(session);
+  await assert.rejects(session.ready, /too long to load/);
+  await waitUntil(async () => {
+    const { stdout } = await execFileAsync("/bin/ps", ["-axo", "command="]);
+    return !stdout.includes(fake.marker);
+  });
+});
+
+test("times out when a whisper response body stalls", async () => {
+  const fake = fakeWhisperServer("stalled-inference");
+  const session = core.startWhisperServer(
+    { whisper: fake.cli, model: fake.marker },
+    "en",
+    250,
+    {
+      startupTimeoutMs: 2_000,
+      requestTimeoutMs: 100,
+      pollIntervalMs: 10,
+    },
+  );
+  assert.ok(session);
+  await session.ready;
+  await assert.rejects(session.transcribe(fake.wav, "en"), /timed out|abort/i);
+  await session.close();
+  const pid = Number(readFileSync(fake.marker, "utf8"));
+  await waitUntil(() => !pidExists(pid));
+});
+
+function fakeWhisperCli() {
+  const folder = mkdtempSync(join(temporary, "fake-whisper-cli-"));
+  const cli = join(folder, "whisper-cli");
+  const marker = join(folder, "guarded-cli.pid");
+  writeFileSync(
+    cli,
+    String.raw`#!/usr/bin/env node
+const fs = require("node:fs");
+fs.writeFileSync(process.argv[2], String(process.pid));
+console.log("ready");
+setInterval(() => {}, 1000);
+`,
+  );
+  chmodSync(cli, 0o755);
+  return { cli, marker };
+}
+
+test(
+  "guardian stops the whisper CLI fallback when its parent is killed",
+  { timeout: 10_000 },
+  async (t) => {
+    const fake = fakeWhisperCli();
+    const scenario = spawn(
+      process.execPath,
+      [
+        "-e",
+        `const core = require(process.argv[1]);
+core.runGuardedWhisper(
+  process.argv[2],
+  [process.argv[3]],
+  (line) => console.log(line)
+);`,
+        compiled,
+        fake.cli,
+        fake.marker,
+      ],
+      { stdio: ["ignore", "pipe", "pipe"] },
+    );
+    t.after(() => {
+      if (scenario.exitCode === null && scenario.signalCode === null)
+        scenario.kill("SIGKILL");
+    });
+    await new Promise((resolve, reject) => {
+      let output = "";
+      scenario.stdout.setEncoding("utf8");
+      scenario.stdout.on("data", (chunk) => {
+        output += chunk;
+        if (output.includes("ready")) resolve();
+      });
+      scenario.once("error", reject);
+      scenario.once("close", () => {
+        if (!output.includes("ready"))
+          reject(new Error("Guarded whisper CLI stopped before readiness."));
+      });
+    });
+    const pid = Number(readFileSync(fake.marker, "utf8"));
+    scenario.kill("SIGKILL");
+    await new Promise((resolve) => scenario.once("close", resolve));
+    await waitUntil(async () => {
+      if (pidExists(pid)) return false;
+      const { stdout } = await execFileAsync("/bin/ps", ["-axo", "command="]);
+      return !stdout.includes(fake.marker);
+    });
+  },
+);
+
+test(
+  "guardian stops the whisper server when its parent is killed",
+  { timeout: 10_000 },
+  async (t) => {
+    const fake = fakeWhisperServer();
+    const scenario = spawn(
+      process.execPath,
+      [
+        "-e",
+        `const core = require(process.argv[1]);
+const session = core.startWhisperServer(
+  { whisper: process.argv[2], model: process.argv[3] },
+  "en",
+  250,
+  { startupTimeoutMs: 2000, pollIntervalMs: 10 }
+);
+if (!session) throw new Error("No session");
+session.ready.then(() => {
+  console.log("ready");
+  setInterval(() => {}, 1000);
+});`,
+        compiled,
+        fake.cli,
+        fake.marker,
+      ],
+      { stdio: ["ignore", "pipe", "pipe"] },
+    );
+    t.after(() => {
+      if (scenario.exitCode === null && scenario.signalCode === null)
+        scenario.kill("SIGKILL");
+    });
+    await new Promise((resolve, reject) => {
+      let stdout = "";
+      let stderr = "";
+      scenario.stdout.setEncoding("utf8");
+      scenario.stderr.setEncoding("utf8");
+      scenario.stdout.on("data", (chunk) => {
+        stdout += chunk;
+        if (stdout.includes("ready")) resolve();
+      });
+      scenario.stderr.on("data", (chunk) => {
+        stderr += chunk;
+      });
+      scenario.once("error", reject);
+      scenario.once("close", (code, signal) => {
+        if (!stdout.includes("ready"))
+          reject(
+            new Error(
+              `Scenario stopped before readiness (${signal ?? code}): ${stderr}`,
+            ),
+          );
+      });
+    });
+    const pid = Number(readFileSync(fake.marker, "utf8"));
+    scenario.kill("SIGKILL");
+    await new Promise((resolve) => scenario.once("close", resolve));
+    await waitUntil(async () => {
+      if (pidExists(pid)) return false;
+      const { stdout } = await execFileAsync("/bin/ps", ["-axo", "command="]);
+      return !stdout.includes(fake.marker);
+    });
+  },
+);
 
 test("preserves selected text when appending dictation", () => {
   assert.equal(

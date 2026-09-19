@@ -78,7 +78,7 @@ async function isWhisperWav(path: string): Promise<boolean> {
   }
 }
 
-type WhisperSetup = { whisper: string; model: string; vad?: string };
+export type WhisperSetup = { whisper: string; model: string; vad?: string };
 
 /** Silero VAD v6.2.0 converted for whisper.cpp, from the ggml-org Hugging Face repository. */
 export const sileroModel = {
@@ -374,13 +374,14 @@ async function runWhisper(
   temporary: string,
   onProgress?: (message: string) => void,
   signal?: AbortSignal,
+  runner: typeof run = run,
 ): Promise<string> {
   const result = join(temporary, "result");
   onProgress?.(
     `${translate ? "Translating" : "Transcribing"} with ${modelName(model)}…`,
   );
   try {
-    await run(
+    await runner(
       whisper,
       [
         "-m",
@@ -479,6 +480,16 @@ async function prepare(
       `${modelName(setup.model)} can't translate. Choose large-v3 or another model without “turbo” in its name.`,
     );
   return setup;
+}
+
+/** Resolves the whisper.cpp executable, model, encoder and VAD used for short text transcription. */
+export async function prepareWhisperForText(
+  options: Pick<TranscriptionOptions, "language" | "model" | "vadSpeechPadMs">,
+  settings: Settings,
+  onProgress?: (message: string) => void,
+  signal?: AbortSignal,
+): Promise<WhisperSetup> {
+  return prepare({ ...options, format: "txt" }, settings, onProgress, signal);
 }
 
 /**
@@ -584,10 +595,35 @@ export async function transcribeToText(
   onProgress?: (message: string) => void,
   signal?: AbortSignal,
 ): Promise<string> {
+  const setup = await prepareWhisperForText(
+    options,
+    settings,
+    onProgress,
+    signal,
+  );
+  return transcribePreparedToText(
+    path,
+    options,
+    setup,
+    settings,
+    onProgress,
+    signal,
+  );
+}
+
+/** Transcribes short audio with an already-resolved whisper.cpp setup. */
+export async function transcribePreparedToText(
+  path: string,
+  options: Pick<TranscriptionOptions, "language" | "model" | "vadSpeechPadMs">,
+  setup: WhisperSetup,
+  settings: Settings,
+  onProgress?: (message: string) => void,
+  signal?: AbortSignal,
+  runner: typeof run = run,
+): Promise<string> {
   if (!localFileInfo(path)?.isFile)
     throw new Error(`${path} is not a file that can be read.`);
   const transcription = { ...options, format: "txt" as const };
-  const setup = await prepare(transcription, settings, onProgress, signal);
   const temporary = await mkdtemp(join(tmpdir(), "raycast-dictation-"));
   try {
     const wav = await whisperAudio(
@@ -605,6 +641,7 @@ export async function transcribeToText(
       temporary,
       onProgress,
       signal,
+      runner,
     );
     const text = cleanWhisperText(await readFile(`${result}.txt`, "utf8"));
     if (!text)
