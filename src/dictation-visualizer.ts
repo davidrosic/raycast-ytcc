@@ -129,7 +129,7 @@ function runVisualizer() {
     trace.energy = 0;
     trace.processing = 0;
     trace.attack = 55 + index * 13 + randomBetween(0, 15);
-    trace.release = 260 + index * 90 + randomBetween(0, 40);
+    trace.release = 195 + index * 67.5 + randomBetween(0, 30);
   }
 
   ObjC.registerSubclass({
@@ -143,7 +143,7 @@ function runVisualizer() {
         elapsed += delta;
         const targetEnergy = Math.pow(visualizerLevel, 0.58);
         if (fadeStarted !== undefined) {
-          const fade = Math.min(1, (now - fadeStarted) / 320);
+          const fade = Math.min(1, (now - fadeStarted) / 240);
           panel.setAlphaValue(1 - fade * fade * (3 - 2 * fade));
         }
         for (const index of traceOrder) {
@@ -426,7 +426,7 @@ export function startDictationVisualizer(): DictationVisualizer {
         await Promise.race([
           finished,
           new Promise<void>((resolve) => {
-            fadeTimer = setTimeout(resolve, 360);
+            fadeTimer = setTimeout(resolve, 280);
           }),
         ]);
         if (fadeTimer) clearTimeout(fadeTimer);
