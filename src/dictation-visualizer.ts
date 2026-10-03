@@ -20,11 +20,20 @@ function runVisualizer() {
 
   const width = 160;
   const height = 136;
+  const scale = 0.8;
+  const panelWidth = width * scale;
+  const panelHeight = height * scale;
+  const inset = 12;
   const visible = screen.visibleFrame;
-  const x = Number(visible.origin.x) + (Number(visible.size.width) - width) / 2;
-  const y = Number(visible.origin.y) + 54;
+  const x =
+    Number(visible.origin.x) + Number(visible.size.width) - panelWidth - inset;
+  const y =
+    Number(visible.origin.y) +
+    Number(visible.size.height) -
+    panelHeight -
+    inset;
   const panel = $.NSPanel.alloc.initWithContentRectStyleMaskBackingDefer(
-    $.NSMakeRect(x, y, width, height),
+    $.NSMakeRect(x, y, panelWidth, panelHeight),
     $.NSWindowStyleMaskBorderless,
     $.NSBackingStoreBuffered,
     false,
@@ -434,8 +443,9 @@ function runVisualizer() {
   });
 
   const canvas = $.RaycastDictationBubbleView.alloc.initWithFrame(
-    $.NSMakeRect(0, 0, width, height),
+    $.NSMakeRect(0, 0, panelWidth, panelHeight),
   );
+  canvas.setBounds($.NSMakeRect(0, 0, width, height));
   canvas.setWantsLayer(true);
   canvas.layer.setBackgroundColor(
     $.NSColor.colorWithCalibratedRedGreenBlueAlpha(0, 0, 0, 0.001).CGColor,
