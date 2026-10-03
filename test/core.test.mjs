@@ -22,7 +22,7 @@ const compiled = join(temporary, "core.cjs");
 require("esbuild").buildSync({
   stdin: {
     contents:
-      'export * from "./src/core"; export * from "./src/whisper"; export * from "./src/whisper-server"; export * from "./src/dictation"; export * from "./src/updates"; export * from "./src/playlists"; export { queueSummary } from "./src/jobs"; export * from "./src/models"; export * from "./src/setup";',
+      'export * from "./src/core"; export * from "./src/whisper"; export * from "./src/whisper-server"; export * from "./src/dictation"; export * from "./src/dictation-appearance"; export * from "./src/updates"; export * from "./src/playlists"; export { queueSummary } from "./src/jobs"; export * from "./src/models"; export * from "./src/setup";',
     resolveDir: process.cwd(),
     loader: "ts",
   },
@@ -138,6 +138,216 @@ test("parses AVFoundation audio inputs without including video devices", () => {
     { index: 0, name: "MacBook Air Microphone" },
     { index: 12, name: "Studio Display Microphone" },
   ]);
+});
+
+test("defaults missing or malformed dictation appearance to bottom right", () => {
+  const expected = { position: "bottom-right", offsetX: 0, offsetY: 0 };
+  for (const stored of [
+    undefined,
+    "",
+    "not JSON",
+    "{",
+    "null",
+    "true",
+    "42",
+    '"top-left"',
+    "[]",
+    "{}",
+  ]) {
+    assert.deepEqual(core.parseDictationAppearance(stored), expected);
+  }
+});
+
+test("normalizes individual dictation appearance fields", () => {
+  assert.deepEqual(
+    core.parseDictationAppearance(
+      '{"position":"center","offsetX":25.5,"offsetY":-40}',
+    ),
+    { position: "center", offsetX: 25.5, offsetY: -40 },
+  );
+  assert.deepEqual(
+    core.parseDictationAppearance(
+      '{"position":"unknown","offsetX":-10000,"offsetY":10000}',
+    ),
+    { position: "bottom-right", offsetX: -10000, offsetY: 10000 },
+  );
+  assert.deepEqual(
+    core.parseDictationAppearance('{"position":"top-left","offsetY":12}'),
+    { position: "top-left", offsetX: 0, offsetY: 12 },
+  );
+  for (const invalid of ["12", null, true, {}, [], 10_001, -10_001]) {
+    assert.deepEqual(
+      core.parseDictationAppearance(
+        JSON.stringify({
+          position: "top-center",
+          offsetX: invalid,
+          offsetY: 12,
+        }),
+      ),
+      { position: "top-center", offsetX: 0, offsetY: 12 },
+    );
+    assert.deepEqual(
+      core.parseDictationAppearance(
+        JSON.stringify({
+          position: "top-center",
+          offsetX: -12,
+          offsetY: invalid,
+        }),
+      ),
+      { position: "top-center", offsetX: -12, offsetY: 0 },
+    );
+  }
+  assert.deepEqual(
+    core.parseDictationAppearance(
+      '{"position":"center-left","offsetX":1e999,"offsetY":-1e999}',
+    ),
+    { position: "center-left", offsetX: 0, offsetY: 0 },
+  );
+  assert.deepEqual(
+    core.normalizeDictationAppearance({
+      position: "center-right",
+      offsetX: NaN,
+      offsetY: Infinity,
+    }),
+    { position: "center-right", offsetX: 0, offsetY: 0 },
+  );
+});
+
+test("parses signed dictation offsets and rejects invalid or excessive values", () => {
+  for (const [input, expected] of [
+    ["0", 0],
+    ["", 0],
+    [" \t ", 0],
+    [" +17.5 ", 17.5],
+    ["-2.5", -2.5],
+    ["10000", 10_000],
+    ["-10000", -10_000],
+  ]) {
+    assert.equal(core.parseDictationOffset(input), expected);
+  }
+  for (const input of [
+    "NaN",
+    "Infinity",
+    "-Infinity",
+    "1e999",
+    "10000.1",
+    "-10000.1",
+    "text",
+    "10px",
+  ]) {
+    assert.equal(core.parseDictationOffset(input), undefined);
+  }
+});
+
+test("places the dictation panel at each of its nine screen positions", () => {
+  const screen = { x: 100, y: 200, width: 1000, height: 600 };
+  const panel = { width: 128, height: 100 };
+  const positions = {
+    "top-left": { x: 112, y: 688 },
+    "top-center": { x: 536, y: 688 },
+    "top-right": { x: 960, y: 688 },
+    "center-left": { x: 112, y: 450 },
+    center: { x: 536, y: 450 },
+    "center-right": { x: 960, y: 450 },
+    "bottom-left": { x: 112, y: 212 },
+    "bottom-center": { x: 536, y: 212 },
+    "bottom-right": { x: 960, y: 212 },
+  };
+  assert.equal(core.dictationPositions.length, 9);
+  for (const { value: position } of core.dictationPositions) {
+    const appearance = core.parseDictationAppearance(
+      JSON.stringify({ position }),
+    );
+    assert.equal(appearance.position, position);
+    assert.deepEqual(
+      core.dictationPanelOrigin(screen, panel, appearance),
+      positions[position],
+      position,
+    );
+  }
+});
+
+test("moves the dictation panel right and down for positive offsets", () => {
+  const screen = { x: 100, y: 200, width: 1000, height: 600 };
+  const panel = { width: 128, height: 100 };
+  assert.deepEqual(
+    core.dictationPanelOrigin(screen, panel, {
+      position: "center",
+      offsetX: 25,
+      offsetY: 40,
+    }),
+    { x: 561, y: 410 },
+  );
+  assert.deepEqual(
+    core.dictationPanelOrigin(screen, panel, {
+      position: "center",
+      offsetX: -25,
+      offsetY: -40,
+    }),
+    { x: 511, y: 490 },
+  );
+});
+
+test("clamps dictation offsets within the screen's visible bounds", () => {
+  const screen = { x: 100, y: 200, width: 1000, height: 600 };
+  const panel = { width: 128, height: 100 };
+  assert.deepEqual(
+    core.dictationPanelOrigin(screen, panel, {
+      position: "center",
+      offsetX: 10_000,
+      offsetY: 10_000,
+    }),
+    { x: 960, y: 212 },
+  );
+  assert.deepEqual(
+    core.dictationPanelOrigin(screen, panel, {
+      position: "center",
+      offsetX: -10_000,
+      offsetY: -10_000,
+    }),
+    { x: 112, y: 688 },
+  );
+});
+
+test("places dictation panels on screens with negative coordinates", () => {
+  const screen = { x: -1280, y: -900, width: 1280, height: 900 };
+  const panel = { width: 128, height: 100 };
+  for (const [position, expected] of [
+    ["top-left", { x: -1268, y: -112 }],
+    ["center", { x: -704, y: -500 }],
+    ["bottom-right", { x: -140, y: -888 }],
+  ]) {
+    assert.deepEqual(
+      core.dictationPanelOrigin(screen, panel, {
+        position,
+        offsetX: 0,
+        offsetY: 0,
+      }),
+      expected,
+    );
+  }
+});
+
+test("reduces dictation panel insets when a screen has little available space", () => {
+  const screen = { x: -50, y: 100, width: 100, height: 80 };
+  for (const { value: position } of core.dictationPositions) {
+    assert.deepEqual(
+      core.dictationPanelOrigin(
+        screen,
+        { width: 80, height: 70 },
+        { position, offsetX: 10_000, offsetY: -10_000 },
+      ),
+      { x: -40, y: 105 },
+    );
+    assert.deepEqual(
+      core.dictationPanelOrigin(
+        screen,
+        { width: 128, height: 100 },
+        { position, offsetX: -10_000, offsetY: 10_000 },
+      ),
+      { x: -50, y: 100 },
+    );
+  }
 });
 
 test("stops microphone recording immediately with SIGINT", async () => {

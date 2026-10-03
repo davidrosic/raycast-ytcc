@@ -37,8 +37,8 @@
     {
       "name": "configure-dictation",
       "title": "Configure Dictation",
-      "subtitle": "Model, microphone & language",
-      "description": "Choose the separate whisper model, microphone and language used for local dictation",
+      "subtitle": "Voice & bubble settings",
+      "description": "Choose the separate whisper model, microphone, language and bubble position used for local dictation",
       "mode": "view"
     },
     {

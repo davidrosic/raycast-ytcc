@@ -6,6 +6,7 @@ export const dictationStorage = {
   model: "dictationModel",
   microphone: "dictationMicrophone",
   language: "dictationLanguage",
+  visualizer: "dictationVisualizer",
 } as const;
 
 export const defaultMicrophone = "default";

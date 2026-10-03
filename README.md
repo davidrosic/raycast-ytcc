@@ -42,7 +42,7 @@ The extension finds tools in your `PATH`, `/opt/homebrew/bin`, `/usr/local/bin`,
 | **Download Video**            | Subtitles, audio and video for a YouTube video, playlist or channel, audio and video from other sites, or a pasted file path |
 | **Transcribe Selected Files** | Transcribes the files or folders selected in Finder                                                                          |
 | **Dictate**                   | Records while its hotkey is held, then inserts the local transcription at the cursor                                         |
-| **Configure Dictation**       | Chooses the dictation model, microphone and spoken language                                                                  |
+| **Configure Dictation**       | Chooses the dictation model, microphone, spoken language and bubble position                                                 |
 | **Manage Tools and Models**   | Installs yt-dlp, ffmpeg and whisper.cpp, and downloads whisper models                                                        |
 | **Queue**                     | Running, queued and finished downloads and transcriptions, with Cancel and results                                           |
 | **Queue in Menu Bar**         | Shows progress in the menu bar while the queue is running                                                                    |
@@ -91,7 +91,7 @@ Links typed by hand, and links to any other site [supported by yt-dlp](https://g
 ### Set it up
 
 1. Install ffmpeg and whisper.cpp, then download a model in **Manage Tools and Models**.
-2. Open **Configure Dictation**. Choose a model, **System Default** or a connected microphone, and a spoken language or **Detect Automatically**. The dictation model is separate from the model used for files and downloaded videos.
+2. Open **Configure Dictation**. Choose a model, **System Default** or a connected microphone, and a spoken language or **Detect Automatically**. The dictation model is separate from the model used for files and downloaded videos. Choose a corner, edge or center for the bubble; **Bottom Right** is the default. Horizontal and vertical offsets adjust its position in screen points: positive values move right and down, and negative values move left and up.
 3. Open Raycast Settings → Extensions, select **Dictate**, and record a hotkey.
 
 Opening **Dictate** with Return instead of a held hotkey shows a setup prompt. Choose **Open Command Settings** to assign or change its shortcut without starting the microphone.

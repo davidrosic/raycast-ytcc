@@ -23,6 +23,7 @@ import {
   DictationVisualizer,
   startDictationVisualizer,
 } from "./dictation-visualizer";
+import { parseDictationAppearance } from "./dictation-appearance";
 import { preferences } from "./preferences";
 import {
   prepareWhisperForText,
@@ -141,13 +142,14 @@ export default async function Command() {
       },
     );
     void warmup.catch(() => undefined);
-    const [microphone, folder] = await Promise.all([
+    const [microphone, appearance, folder] = await Promise.all([
       LocalStorage.getItem<string>(dictationStorage.microphone),
+      LocalStorage.getItem<string>(dictationStorage.visualizer),
       mkdtemp(join(tmpdir(), "raycast-dictation-")),
     ]);
     temporary = folder;
     const wav = join(temporary, "dictation.wav");
-    visualizer = startDictationVisualizer();
+    visualizer = startDictationVisualizer(parseDictationAppearance(appearance));
     recording = await startMicrophoneRecording(
       wav,
       microphone ?? defaultMicrophone,

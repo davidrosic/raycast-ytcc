@@ -16,6 +16,12 @@ import {
   defaultMicrophone,
   dictationStorage,
 } from "./dictation";
+import {
+  DictationAppearance,
+  dictationPositions,
+  parseDictationAppearance,
+  parseDictationOffset,
+} from "./dictation-appearance";
 import { openSetup } from "./open-setup";
 import { preferences } from "./preferences";
 import { LanguageDropdown, useFavoriteLanguages } from "./transcription";
@@ -32,6 +38,7 @@ type State = {
   model?: string;
   microphone?: string;
   language?: string;
+  appearance?: DictationAppearance;
 };
 
 export default function Command() {
@@ -42,6 +49,8 @@ export default function Command() {
     models: [],
     devices: [],
   });
+  const [offsetXError, setOffsetXError] = useState<string>();
+  const [offsetYError, setOffsetYError] = useState<string>();
 
   useEffect(() => {
     let active = true;
@@ -58,7 +67,8 @@ export default function Command() {
       LocalStorage.getItem<string>(dictationStorage.model),
       LocalStorage.getItem<string>(dictationStorage.microphone),
       LocalStorage.getItem<string>(dictationStorage.language),
-    ]).then(([models, audio, model, microphone, language]) => {
+      LocalStorage.getItem<string>(dictationStorage.visualizer),
+    ]).then(([models, audio, model, microphone, language, visualizer]) => {
       if (!active) return;
       setState({
         loaded: true,
@@ -67,6 +77,7 @@ export default function Command() {
         model,
         microphone,
         language,
+        appearance: parseDictationAppearance(visualizer),
       });
     });
     return () => {
@@ -111,7 +122,27 @@ export default function Command() {
                 model: string;
                 microphone: string;
                 language: string;
+                position: DictationAppearance["position"];
+                offsetX: string;
+                offsetY: string;
               }) => {
+                const offsetX = parseDictationOffset(values.offsetX);
+                const offsetY = parseDictationOffset(values.offsetY);
+                const offsetError = "Enter a number between -10000 and 10000.";
+                setOffsetXError(
+                  offsetX === undefined ? offsetError : undefined,
+                );
+                setOffsetYError(
+                  offsetY === undefined ? offsetError : undefined,
+                );
+                if (offsetX === undefined || offsetY === undefined) return;
+                const appearance = parseDictationAppearance(
+                  JSON.stringify({
+                    position: values.position,
+                    offsetX,
+                    offsetY,
+                  }),
+                );
                 await Promise.all([
                   LocalStorage.setItem(dictationStorage.model, values.model),
                   LocalStorage.setItem(
@@ -121,6 +152,10 @@ export default function Command() {
                   LocalStorage.setItem(
                     dictationStorage.language,
                     values.language,
+                  ),
+                  LocalStorage.setItem(
+                    dictationStorage.visualizer,
+                    JSON.stringify(appearance),
                   ),
                 ]);
                 await showToast({
@@ -190,6 +225,36 @@ export default function Command() {
           defaultWhisperLanguage(favorites.value, settings.whisperLanguage)
         }
         detectAutomatically
+      />
+      <Form.Separator />
+      <Form.Dropdown
+        id="position"
+        title="Bubble Position"
+        defaultValue={state.appearance?.position}
+      >
+        {dictationPositions.map((position) => (
+          <Form.Dropdown.Item
+            key={position.value}
+            value={position.value}
+            title={position.title}
+          />
+        ))}
+      </Form.Dropdown>
+      <Form.TextField
+        id="offsetX"
+        title="Horizontal Offset"
+        defaultValue={String(state.appearance?.offsetX ?? 0)}
+        error={offsetXError}
+        onChange={() => setOffsetXError(undefined)}
+        info="Move the bubble in screen points from the selected position. Positive values move right; negative values move left."
+      />
+      <Form.TextField
+        id="offsetY"
+        title="Vertical Offset"
+        defaultValue={String(state.appearance?.offsetY ?? 0)}
+        error={offsetYError}
+        onChange={() => setOffsetYError(undefined)}
+        info="Move the bubble in screen points from the selected position. Positive values move down; negative values move up."
       />
       <Form.Description text="Dictation stays on this Mac. Silero voice activity detection removes silence, and the completed utterance is processed only after you release the hotkey." />
     </Form>

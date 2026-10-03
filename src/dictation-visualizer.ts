@@ -1,4 +1,10 @@
 import { spawn } from "node:child_process";
+import {
+  DictationAppearance,
+  defaultDictationAppearance,
+  dictationPanelOrigin,
+  normalizeDictationAppearance,
+} from "./dictation-appearance";
 
 export type DictationVisualizer = {
   ready: Promise<boolean>;
@@ -12,7 +18,7 @@ ObjC.import("AppKit");
 ObjC.import("Foundation");
 ObjC.import("QuartzCore");
 
-function runVisualizer() {
+function runVisualizer(appearance) {
   const app = $.NSApplication.sharedApplication;
   app.setActivationPolicy($.NSApplicationActivationPolicyAccessory);
   const screen = $.NSScreen.mainScreen;
@@ -23,17 +29,24 @@ function runVisualizer() {
   const scale = 0.8;
   const panelWidth = width * scale;
   const panelHeight = height * scale;
-  const inset = 12;
   const visible = screen.visibleFrame;
-  const x =
-    Number(visible.origin.x) + Number(visible.size.width) - panelWidth - inset;
-  const y =
-    Number(visible.origin.y) +
-    Number(visible.size.height) -
-    panelHeight -
-    inset;
+  const origin = (${dictationPanelOrigin.toString()})(
+    {
+      x: Number(visible.origin.x),
+      y: Number(visible.origin.y),
+      width: Number(visible.size.width),
+      height: Number(visible.size.height),
+    },
+    { width: panelWidth, height: panelHeight },
+    appearance,
+  );
   const panel = $.NSPanel.alloc.initWithContentRectStyleMaskBackingDefer(
-    $.NSMakeRect(x, y, panelWidth, panelHeight),
+    $.NSMakeRect(
+      Math.round(origin.x),
+      Math.round(origin.y),
+      panelWidth,
+      panelHeight,
+    ),
     $.NSWindowStyleMaskBorderless,
     $.NSBackingStoreBuffered,
     false,
@@ -502,14 +515,24 @@ function runVisualizer() {
   panel.orderOut(null);
 }
 
-runVisualizer();
+function run(args) {
+  runVisualizer(JSON.parse(args[0]));
+}
 `;
 
 /** A small floating bubble that never takes focus from the current app. */
-export function startDictationVisualizer(): DictationVisualizer {
+export function startDictationVisualizer(
+  appearance: DictationAppearance = defaultDictationAppearance,
+): DictationVisualizer {
   const child = spawn(
     "/usr/bin/osascript",
-    ["-l", "JavaScript", "-e", visualizerScript],
+    [
+      "-l",
+      "JavaScript",
+      "-e",
+      visualizerScript,
+      JSON.stringify(normalizeDictationAppearance(appearance)),
+    ],
     { shell: false, windowsHide: true, stdio: ["pipe", "ignore", "pipe"] },
   );
   let closed = false;
