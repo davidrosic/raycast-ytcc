@@ -26,9 +26,10 @@ function runVisualizer(appearance) {
 
   const width = 160;
   const height = 136;
+  const padding = 6;
   const scale = 0.8;
   const panelWidth = width * scale;
-  const panelHeight = height * scale;
+  const panelHeight = (height + padding * 2) * scale;
   const visible = screen.visibleFrame;
   const origin = (${dictationPanelOrigin.toString()})(
     {
@@ -164,9 +165,10 @@ function runVisualizer(appearance) {
   for (const mode of bubbleModes) mode.tempo = motion(0.65, 1.35, 2200, 5100);
   let bubbleEnergy = 0;
   let bubbleDeformation = 0;
+  let bubbleExpansion = 0;
 
   function bubblePoint(angle, padding) {
-    let radius = bubbleRadius + padding;
+    let radius = bubbleRadius + bubbleExpansion + padding;
     let slope = 0;
     for (const mode of bubbleModes) {
       const phase = mode.order * angle + mode.phase;
@@ -319,6 +321,13 @@ function runVisualizer(appearance) {
         const response = targetEnergy > bubbleEnergy ? 90 : 320;
         bubbleEnergy +=
           (targetEnergy - bubbleEnergy) * (1 - Math.exp(-delta / response));
+        const targetExpansion = visualizerProcessing ? 0 : targetEnergy * 4;
+        const expansionResponse = targetExpansion > bubbleExpansion ? 65 : 110;
+        bubbleExpansion +=
+          (targetExpansion - bubbleExpansion) *
+          (1 - Math.exp(-delta / expansionResponse));
+        if (targetExpansion === 0 && bubbleExpansion < 0.01)
+          bubbleExpansion = 0;
         const drift = motionValue(bubbleDrift);
         bubbleDeformation = 2.4 + drift * 0.2 + bubbleEnergy * 0.95;
         const bubbleSpeed = 2.1 + drift * 0.3 + bubbleEnergy * 3;
@@ -396,7 +405,8 @@ function runVisualizer(appearance) {
             const asymmetry =
               0.5 + 0.13 * Math.sin(phase * 0.48 + progress * Math.PI);
             const xPosition =
-              width / 2 + (progress - 0.5) * (bubbleRadius - 4) * 2;
+              width / 2 +
+              (progress - 0.5) * (bubbleRadius + bubbleExpansion - 4) * 2;
             upper.push($.NSMakePoint(xPosition, center + spread * asymmetry));
             lower.push(
               $.NSMakePoint(xPosition, center - spread * (1 - asymmetry)),
@@ -457,7 +467,7 @@ function runVisualizer(appearance) {
   const canvas = $.RaycastDictationBubbleView.alloc.initWithFrame(
     $.NSMakeRect(0, 0, panelWidth, panelHeight),
   );
-  canvas.setBounds($.NSMakeRect(0, 0, width, height));
+  canvas.setBounds($.NSMakeRect(0, -padding, width, height + padding * 2));
   canvas.setWantsLayer(true);
   canvas.layer.setBackgroundColor(
     $.NSColor.colorWithCalibratedRedGreenBlueAlpha(0, 0, 0, 0.001).CGColor,
