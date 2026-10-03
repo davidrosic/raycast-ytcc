@@ -1440,22 +1440,27 @@ export async function downloadCaption(
   const destination = directory ?? (await outputDirectory(settings));
   const temporary = await mkdtemp(join(tmpdir(), "raycast-captions-"));
   try {
+    // YouTube's JSON3 has spoken segments, while VTT repeats scrolling lines.
     const preferred =
-      format === "raw"
-        ? caption.formats.includes("vtt")
-          ? "vtt"
-          : caption.formats.includes("srt")
-            ? "srt"
-            : caption.formats.includes("json3")
-              ? "json3"
-              : caption.formats[0]
-        : format === "srt" && caption.formats.includes("srt")
-          ? "srt"
-          : caption.formats.includes("vtt")
+      format === "raw" &&
+      caption.kind === "automatic" &&
+      caption.formats.includes("json3")
+        ? "json3"
+        : format === "raw"
+          ? caption.formats.includes("vtt")
             ? "vtt"
             : caption.formats.includes("srt")
               ? "srt"
-              : caption.formats[0];
+              : caption.formats.includes("json3")
+                ? "json3"
+                : caption.formats[0]
+          : format === "srt" && caption.formats.includes("srt")
+            ? "srt"
+            : caption.formats.includes("vtt")
+              ? "vtt"
+              : caption.formats.includes("srt")
+                ? "srt"
+                : caption.formats[0];
     const langPattern = `^${caption.language.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`;
     const args = [
       "--no-playlist",

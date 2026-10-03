@@ -20,7 +20,7 @@ import {
 } from "./whisper";
 
 export const captionFormats: { value: ExportFormat; title: string }[] = [
-  { value: "raw", title: "RAW · TXT (all cues)" },
+  { value: "raw", title: "RAW · TXT" },
   { value: "txt", title: "Clean TXT" },
   { value: "srt", title: "SRT" },
   { value: "vtt", title: "VTT" },

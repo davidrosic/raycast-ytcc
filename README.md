@@ -108,16 +108,18 @@ To use Caps Lock as a Super button, open Raycast Settings → Keyboard → Hyper
 
 ## Subtitles
 
-| Format                   | File        | What you get                                                                                                                                |
-| ------------------------ | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| **RAW · TXT (all cues)** | `- RAW.txt` | The text of every caption cue in order, without timestamps. Automatic captions repeat each line as it scrolls, and RAW keeps those repeats. |
-| **Clean TXT**            | `.txt`      | Readable plain text with the scrolling repeats removed.                                                                                     |
-| **SRT**                  | `.srt`      | Timed subtitles for video players and editors. Empty cues are removed and the rest renumbered.                                              |
-| **VTT**                  | `.vtt`      | Timed WebVTT subtitles as YouTube provides them.                                                                                            |
+| Format        | File        | What you get                                                                                                                                                           |
+| ------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **RAW · TXT** | `- RAW.txt` | Original caption text without timestamps. Automatic captions use YouTube's transcript data when available to avoid scrolling repeats while keeping spoken repetitions. |
+| **Clean TXT** | `.txt`      | Readable plain text with overlapping cue text removed.                                                                                                                 |
+| **SRT**       | `.srt`      | Timed subtitles for video players and editors. Empty cues are removed and the rest renumbered.                                                                         |
+| **VTT**       | `.vtt`      | Timed WebVTT subtitles as YouTube provides them.                                                                                                                       |
 
 Rows marked **Creator** are subtitles uploaded by the channel. Rows marked **Automatic** are YouTube's speech recognition. **(Original)** marks automatic captions in the video's spoken language.
 
 Files are named `Video Title [videoId] - language.srt`, with `- auto` for automatic captions and `- RAW` for RAW exports. If a file with the same name exists, a number is added.
+
+When an automatic caption only provides timed subtitles, RAW keeps every cue as supplied, so scrolling repeats can remain. Choose **Clean TXT** to remove them.
 
 To paste a subtitle somewhere right away, press ⌘⇧C instead of ↵: the file is saved and its text copied to the clipboard. After a normal download, the toast offers **Copy Text**, and ⌘K offers **Copy Last Subtitle**.
 
@@ -187,7 +189,7 @@ If you type a path instead of pasting it, the file appears as a row. Press ↵ t
 ### The form
 
 - **Spoken Language:** your favorite languages come first, with the best match selected. All languages supported by whisper.cpp are listed below them, along with **Detect Automatically**. Type to search the list.
-- **Output:** **RAW · TXT (all cues)**, **Clean TXT**, **SRT** or **VTT**. RAW is selected by default.
+- **Output:** **RAW · TXT**, **Clean TXT**, **SRT** or **VTT**. RAW is selected by default.
 - **Model:** the whisper models found next to your default model. `large-v3-turbo` is fast and accurate; `large-v3` is the most accurate and slowest; quantized models such as `large-v3-turbo-q5_0` are smaller and faster, and slightly less accurate. See [Whisper models](#whisper-models).
 - **Translate to English:** whisper writes an English translation instead of the spoken language. Turbo models were not trained to translate and answer in the spoken language, so choose `large-v3` or `medium` for translation.
 
