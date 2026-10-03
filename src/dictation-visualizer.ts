@@ -132,6 +132,60 @@ function runVisualizer() {
     trace.release = 195 + index * 67.5 + randomBetween(0, 30);
   }
 
+  const bubbleRadius = 52;
+  const bubbleIdle = motion(0, 1, 1800, 4600);
+  const bubbleModes = [
+    { order: 2, weight: 0.56, phase: 0.4, speed: 0.82 },
+    { order: 3, weight: 0.3, phase: 2.1, speed: -0.63 },
+    { order: 4, weight: 0.14, phase: 4.8, speed: 0.41 },
+  ];
+  for (const mode of bubbleModes) mode.tempo = motion(0.65, 1.35, 2200, 5100);
+  let bubbleEnergy = 0;
+  let bubbleDeformation = 0;
+
+  function bubblePoint(angle, padding) {
+    let radius = bubbleRadius + padding;
+    let slope = 0;
+    for (const mode of bubbleModes) {
+      const phase = mode.order * angle + mode.phase;
+      radius += bubbleDeformation * mode.weight * Math.sin(phase);
+      slope += bubbleDeformation * mode.weight * mode.order * Math.cos(phase);
+    }
+    const cosine = Math.cos(angle);
+    const sine = Math.sin(angle);
+    return {
+      x: width / 2 + radius * cosine,
+      y: height / 2 + radius * sine,
+      dx: slope * cosine - radius * sine,
+      dy: slope * sine + radius * cosine,
+    };
+  }
+
+  function bubblePath(padding, start, end) {
+    const path = $.NSBezierPath.bezierPath;
+    const segments = Math.ceil((end - start) / (Math.PI / 12));
+    const step = (end - start) / segments;
+    let previous = bubblePoint(start, padding);
+    path.moveToPoint($.NSMakePoint(previous.x, previous.y));
+    for (let segment = 1; segment <= segments; segment += 1) {
+      const next = bubblePoint(start + step * segment, padding);
+      path.curveToPointControlPoint1ControlPoint2(
+        $.NSMakePoint(next.x, next.y),
+        $.NSMakePoint(
+          previous.x + (previous.dx * step) / 3,
+          previous.y + (previous.dy * step) / 3,
+        ),
+        $.NSMakePoint(
+          next.x - (next.dx * step) / 3,
+          next.y - (next.dy * step) / 3,
+        ),
+      );
+      previous = next;
+    }
+    if (end - start >= Math.PI * 2) path.closePath;
+    return path;
+  }
+
   function color(red, green, blue, alpha) {
     return $.NSColor.colorWithCalibratedRedGreenBlueAlpha(
       red,
@@ -180,8 +234,6 @@ function runVisualizer() {
     ]);
   }
 
-  const bubble = oval(21, 22, 118, 92);
-  const halo = oval(9, 10, 142, 116);
   const shellGradient = gradient([
     [0.12, 0.19, 0.25, 0.74],
     [0.025, 0.038, 0.065, 0.96],
@@ -197,29 +249,29 @@ function runVisualizer() {
     [0.11, 0.4, 0.8, 0.04],
     [0.11, 0.4, 0.8, 0],
   ]);
-  const lowerGlow = oval(29, 25, 102, 59);
+  const lowerGlow = oval(34, 18, 92, 66);
   const highlightGradient = gradient([
     [0.82, 0.96, 1, 0.1],
     [0.82, 0.96, 1, 0.02],
     [0.82, 0.96, 1, 0],
   ]);
-  const topHighlight = oval(42, 99, 76, 11);
+  const topHighlight = oval(49, 107, 62, 10);
   const whiteGradient = gradient([
     [1, 1, 1, 0.9],
     [0.72, 0.97, 1, 0.3],
     [0.65, 0.89, 1, 0],
   ]);
   const bowl = $.NSBezierPath.bezierPath;
-  bowl.moveToPoint($.NSMakePoint(26, 64));
+  bowl.moveToPoint($.NSMakePoint(33, 64));
   bowl.curveToPointControlPoint1ControlPoint2(
-    $.NSMakePoint(134, 64),
-    $.NSMakePoint(39, 13),
-    $.NSMakePoint(121, 13),
+    $.NSMakePoint(127, 64),
+    $.NSMakePoint(44, 3),
+    $.NSMakePoint(116, 3),
   );
   bowl.curveToPointControlPoint1ControlPoint2(
-    $.NSMakePoint(26, 64),
-    $.NSMakePoint(118, 42),
-    $.NSMakePoint(42, 42),
+    $.NSMakePoint(33, 64),
+    $.NSMakePoint(116, 38),
+    $.NSMakePoint(44, 38),
   );
   bowl.closePath;
   const bowlGradient = gradient([
@@ -227,20 +279,6 @@ function runVisualizer() {
     [0.43, 0.67, 0.9, 0.08],
     [0.43, 0.67, 0.9, 0],
   ]);
-  const lowerRim = $.NSBezierPath.bezierPath;
-  lowerRim.moveToPoint($.NSMakePoint(21, 68));
-  lowerRim.curveToPointControlPoint1ControlPoint2(
-    $.NSMakePoint(80, 22),
-    $.NSMakePoint(21, 42.6),
-    $.NSMakePoint(47.4, 22),
-  );
-  lowerRim.curveToPointControlPoint1ControlPoint2(
-    $.NSMakePoint(139, 68),
-    $.NSMakePoint(112.6, 22),
-    $.NSMakePoint(139, 42.6),
-  );
-  lowerRim.setLineWidth(0.65);
-  bubble.setLineWidth(0.5);
   for (const trace of traces) {
     trace.gradient = ribbonGradient(trace, 0);
     trace.cachedProcessing = 0;
@@ -256,6 +294,21 @@ function runVisualizer() {
         lastFrame = now;
         elapsed += delta;
         const targetEnergy = Math.pow(visualizerLevel, 0.58);
+        const response = targetEnergy > bubbleEnergy ? 90 : 320;
+        bubbleEnergy +=
+          (targetEnergy - bubbleEnergy) * (1 - Math.exp(-delta / response));
+        const idle = Math.max(0, (motionValue(bubbleIdle) - 0.3) / 0.7);
+        const idleActivity = idle * idle * (3 - 2 * idle);
+        bubbleDeformation = idleActivity * 0.6 + bubbleEnergy * 2.6;
+        const bubbleSpeed = 0.18 + idleActivity * 0.2 + bubbleEnergy * 2;
+        for (const mode of bubbleModes)
+          mode.phase +=
+            (delta / 1000) * bubbleSpeed * mode.speed * motionValue(mode.tempo);
+        const bubble = bubblePath(0, 0, Math.PI * 2);
+        const halo = bubblePath(12, 0, Math.PI * 2);
+        const lowerRim = bubblePath(0, Math.PI, Math.PI * 2);
+        bubble.setLineWidth(0.5);
+        lowerRim.setLineWidth(0.65);
         if (fadeStarted !== undefined) {
           const fade = Math.min(1, (now - fadeStarted) / 240);
           panel.setAlphaValue(1 - fade * fade * (3 - 2 * fade));
@@ -321,7 +374,8 @@ function runVisualizer() {
               centerWidth * Math.pow(Math.sin(Math.PI * progress), 1.5);
             const asymmetry =
               0.5 + 0.13 * Math.sin(phase * 0.48 + progress * Math.PI);
-            const xPosition = 24 + progress * 112;
+            const xPosition =
+              width / 2 + (progress - 0.5) * (bubbleRadius - 4) * 2;
             upper.push($.NSMakePoint(xPosition, center + spread * asymmetry));
             lower.push(
               $.NSMakePoint(xPosition, center - spread * (1 - asymmetry)),
@@ -336,7 +390,7 @@ function runVisualizer() {
           ribbon.closePath;
           const bloomHeight = 20 + energy * 22;
           trace.bloom.drawInBezierPathRelativeCenterPosition(
-            oval(29, centerY - bloomHeight / 2, 102, bloomHeight),
+            oval(37, centerY - bloomHeight / 2, 86, bloomHeight),
             $.NSMakePoint(0, 0),
           );
           $.NSGraphicsContext.saveGraphicsState;
