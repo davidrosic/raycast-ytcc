@@ -101,8 +101,8 @@ To use Caps Lock as a Super button, open Raycast Settings → Keyboard → Hyper
 ### Use it
 
 1. Put the cursor where the text should appear.
-2. Press and keep holding the **Dictate** hotkey. Start speaking when the floating waveform appears; it moves with the microphone level.
-3. Release the hotkey. The waveform switches to a processing pulse while the full utterance is transcribed, then closes when the text is inserted. Press Escape while recording to cancel instead.
+2. Press and keep holding the **Dictate** hotkey. Start speaking when the floating bubble appears. Its shape keeps morphing even in silence and moves noticeably faster and a little more strongly while you speak.
+3. Release the hotkey. The bubble switches to a processing pulse while the full utterance is transcribed, then closes when the text is inserted. Press Escape while recording to cancel instead.
 
 `large-v3-turbo` is a good balance of accuracy and speed. With **Voice Activity Detection** on, as it is by default, Silero VAD removes silence before whisper processes the recording. Recording, voice detection and transcription all happen on your Mac, and the temporary recording is removed afterward.
 

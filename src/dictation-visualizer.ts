@@ -142,7 +142,7 @@ function runVisualizer() {
   }
 
   const bubbleRadius = 52;
-  const bubbleIdle = motion(0, 1, 1800, 4600);
+  const bubbleDrift = motion(0, 1, 1800, 4600);
   const bubbleModes = [
     { order: 2, weight: 0.56, phase: 0.4, speed: 0.82 },
     { order: 3, weight: 0.3, phase: 2.1, speed: -0.63 },
@@ -306,15 +306,14 @@ function runVisualizer() {
         const response = targetEnergy > bubbleEnergy ? 90 : 320;
         bubbleEnergy +=
           (targetEnergy - bubbleEnergy) * (1 - Math.exp(-delta / response));
-        const idle = Math.max(0, (motionValue(bubbleIdle) - 0.3) / 0.7);
-        const idleActivity = idle * idle * (3 - 2 * idle);
-        bubbleDeformation = idleActivity * 0.6 + bubbleEnergy * 2.6;
-        const bubbleSpeed = 0.18 + idleActivity * 0.2 + bubbleEnergy * 2;
+        const drift = motionValue(bubbleDrift);
+        bubbleDeformation = 2.4 + drift * 0.2 + bubbleEnergy * 0.95;
+        const bubbleSpeed = 2.1 + drift * 0.3 + bubbleEnergy * 3;
         for (const mode of bubbleModes)
           mode.phase +=
             (delta / 1000) * bubbleSpeed * mode.speed * motionValue(mode.tempo);
         const bubble = bubblePath(0, 0, Math.PI * 2);
-        const halo = bubblePath(12, 0, Math.PI * 2);
+        const halo = bubblePath(10, 0, Math.PI * 2);
         const lowerRim = bubblePath(0, Math.PI, Math.PI * 2);
         bubble.setLineWidth(0.5);
         lowerRim.setLineWidth(0.65);
