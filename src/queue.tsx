@@ -277,7 +277,8 @@ export function jobToast(job: Job, showQueue?: () => void) {
       ? {
           style: Toast.Style.Success,
           title: doneTitle(job),
-          message: isPlaylist(job) ? jobSubtitle(job) : output,
+          message:
+            isPlaylist(job) || job.skipped?.length ? jobSubtitle(job) : output,
           primaryAction: !output
             ? undefined
             : savesTranscripts(job)
