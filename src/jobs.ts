@@ -391,15 +391,13 @@ async function perform(
         outputs: await downloadImages(spec.video, settings, onProgress, signal),
       };
     case "media":
-      return {
-        outputs: await downloadMedia(
-          spec.video,
-          spec.format,
-          settings,
-          onProgress,
-          signal,
-        ),
-      };
+      return await downloadMedia(
+        spec.video,
+        spec.format,
+        settings,
+        onProgress,
+        signal,
+      );
   }
 }
 
@@ -518,11 +516,15 @@ export function queueSummary(jobs: Job[]): string | undefined {
         0,
       );
     const failed = group.filter((job) => job.status === "failed").length;
+    const skipped = group
+      .filter((job) => job.status === "done")
+      .reduce((total, job) => total + (job.skipped?.length ?? 0), 0);
+    const missed = skipped ? `, ${count(skipped, "video")} skipped` : "";
     if (done && failed)
       parts.push(
-        `${done} of ${done + failed} ${noun}s saved, ${failed} failed`,
+        `${done} of ${done + failed} ${noun}s saved, ${failed} failed${missed}`,
       );
-    else if (done) parts.push(`${count(done, noun)} saved`);
+    else if (done) parts.push(`${count(done, noun)} saved${missed}`);
     else if (failed) parts.push(`${count(failed, noun)} failed`);
   }
   for (const job of jobs)

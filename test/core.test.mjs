@@ -1286,6 +1286,39 @@ test("summarizes a finished queue", () => {
     core.queueSummary([media("done"), media("failed"), file("done")]),
     "1 transcription saved\n1 of 2 downloads saved, 1 failed",
   );
+  assert.equal(
+    core.queueSummary([
+      { ...media("done"), skipped: [{ title: "Item 2 of 2", reason: "x" }] },
+    ]),
+    "1 download saved, 1 video skipped",
+  );
+});
+
+test("lists the videos in a post that yt-dlp didn't save", () => {
+  const post = core.postErrors({});
+  for (const line of [
+    "[download] Downloading item 1 of 3",
+    "[download] Destination: dl/1-1284162716018413568.mp4",
+    "[download] Downloading item 2 of 3",
+    "ERROR: [Instagram] C1a2b3: No video formats found!",
+    "[download] Downloading item 3 of 3",
+    "ERROR: [vimeo] 551578322: Unable to download webpage: HTTP Error 401: Unauthorized (caused by <HTTPError 401: Unauthorized>)",
+  ])
+    post.read(line);
+  assert.deepEqual(post.missing(2, 1), [
+    {
+      title: "Item 3 of 3",
+      reason: "Unable to download webpage: HTTP Error 401: Unauthorized",
+    },
+  ]);
+  assert.deepEqual(post.missing(2, 2), []);
+  assert.deepEqual(post.missing(3, 1)[1], {
+    title: "Video in this post",
+    reason: "yt-dlp didn't save this video.",
+  });
+  const privatePost = core.postErrors({});
+  privatePost.read("ERROR: [youtube] jNQXAC9IVRw: Private video. Sign in");
+  assert.match(privatePost.missing(1, 0)[0].reason, /^This video is private\./);
 });
 
 test("recognizes links from other video sites", () => {
