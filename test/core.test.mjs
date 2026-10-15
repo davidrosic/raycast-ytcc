@@ -22,7 +22,7 @@ const compiled = join(temporary, "core.cjs");
 require("esbuild").buildSync({
   stdin: {
     contents:
-      'export * from "./src/core"; export * from "./src/whisper"; export * from "./src/whisper-server"; export * from "./src/dictation"; export * from "./src/dictation-appearance"; export * from "./src/updates"; export * from "./src/playlists"; export { queueSummary } from "./src/jobs"; export * from "./src/models"; export * from "./src/setup";',
+      'export * from "./src/core"; export * from "./src/whisper"; export * from "./src/whisper-server"; export * from "./src/dictation"; export * from "./src/dictation-appearance"; export * from "./src/updates"; export * from "./src/playlists"; export { queueSummary } from "./src/jobs"; export * from "./src/lock"; export * from "./src/models"; export * from "./src/setup";',
     resolveDir: process.cwd(),
     loader: "ts",
   },
@@ -1599,4 +1599,45 @@ test("describes tools, Homebrew output and model downloads", () => {
       (model) => /^[0-9a-f]{64}$/.test(model.sha256) && model.size > 1e7,
     ),
   );
+});
+
+test("lets one process at a time hold a lock, even after a crash", async () => {
+  const path = join(temporary, "worker.lock");
+  const lock = core.tryLock(path);
+  assert.ok(lock);
+  assert.equal(readFileSync(path, "utf8"), String(process.pid));
+  assert.equal(core.tryLock(path), undefined);
+  lock.release();
+  assert.equal(existsSync(path), false);
+
+  // A file left by a process that stopped doesn't block the next one.
+  writeFileSync(path, "999999");
+  const recovered = core.tryLock(path);
+  assert.ok(recovered);
+  recovered.release();
+
+  const holder = spawn(
+    process.execPath,
+    [
+      "-e",
+      `require("fs").openSync(process.argv[1], require("fs").constants.O_RDWR | require("fs").constants.O_CREAT | 0x20); console.log("locked"); setInterval(() => {}, 1000);`,
+      path,
+    ],
+    { stdio: ["ignore", "pipe", "inherit"] },
+  );
+  await new Promise((done) => holder.stdout.once("data", done));
+  assert.equal(core.tryLock(path), undefined);
+  const controller = new AbortController();
+  const waiting = core.waitForLock(path, controller.signal);
+  holder.kill("SIGKILL");
+  const taken = await waiting;
+  assert.equal(readFileSync(path, "utf8"), String(process.pid));
+  taken.release();
+
+  const busy = core.tryLock(path);
+  controller.abort();
+  await assert.rejects(core.waitForLock(path, controller.signal), {
+    name: "AbortError",
+  });
+  busy.release();
 });
