@@ -992,13 +992,13 @@ test("uses browser sign-in only when chosen and explains sign-in errors", () => 
     core.explainYtDlpError(error(message), settings).message;
   assert.match(
     explain("[youtube] x: Sign in to confirm your age."),
-    /age-restricted\. To use your YouTube account, choose your browser under Browser Sign-In/,
+    /age-restricted\. To use your YouTube account, choose Firefox or Safari under Browser Sign-In/,
   );
   assert.match(
     explain("[youtube] x: Sign in to confirm your age.", {
-      browserCookies: "chrome",
+      browserCookies: "firefox",
     }),
-    /signed in to YouTube in Chrome/,
+    /signed in to YouTube in Firefox/,
   );
   assert.match(
     explain("could not find firefox cookies database in /x", {
@@ -1015,6 +1015,47 @@ test("uses browser sign-in only when chosen and explains sign-in errors", () => 
   assert.match(explain("HTTP Error 429: Too Many Requests"), /HTTP Error 429/);
   const canceled = core.canceledError();
   assert.equal(core.explainYtDlpError(canceled, {}), canceled);
+});
+
+test("browser sign-in permits only Safari and Firefox, including saved jobs", async () => {
+  const manifest = JSON.parse(readFileSync("package.json", "utf8"));
+  assert.deepEqual(
+    manifest.preferences
+      .find((preference) => preference.name === "browserCookies")
+      .data.map((browser) => browser.value),
+    ["none", "safari", "firefox"],
+  );
+  for (const browserCookies of ["safari", "firefox"]) {
+    const options = await core.ytDlpOptions({
+      ffmpegPath: "/usr/bin/true",
+      browserCookies,
+    });
+    assert.ok(options.includes("--ignore-config"));
+    const index = options.indexOf("--cookies-from-browser");
+    assert.notEqual(index, -1);
+    assert.equal(options[index + 1], browserCookies);
+  }
+  for (const browserCookies of [
+    undefined,
+    "none",
+    "chrome",
+    "brave",
+    "edge",
+    "chromium",
+    "opera",
+    "vivaldi",
+    "chrome:Default",
+    "unknown",
+  ]) {
+    const settings = { ffmpegPath: "/usr/bin/true", browserCookies };
+    const options = await core.ytDlpOptions(settings);
+    assert.ok(options.includes("--ignore-config"));
+    assert.equal(options.includes("--cookies-from-browser"), false);
+    assert.match(
+      core.explainYtDlpError(new Error("Private video"), settings).message,
+      /choose Firefox or Safari under Browser Sign-In/,
+    );
+  }
 });
 
 test("compares yt-dlp versions and picks the update command", () => {
@@ -1060,7 +1101,7 @@ test("compares yt-dlp versions and picks the update command", () => {
       "/usr/local/bin/yt-dlp",
       "Ïúíþ",
     ).args,
-    ["-U"],
+    ["--ignore-config", "-U"],
   );
 });
 
@@ -1293,7 +1334,7 @@ test("explains errors from other sites", () => {
     explain(
       "[Instagram] abc: Instagram sent an empty media response. Check if this post is accessible in your browser without being logged-in. If it is not, then use --cookies-from-browser or --cookies",
     ),
-    /^Instagram only shows this to signed-in accounts\. To use your Instagram account, choose your browser/,
+    /^Instagram only shows this to signed-in accounts\. To use your Instagram account, choose Firefox or Safari/,
   );
   assert.match(
     explain("[twitter] 1: NSFW tweet requires authentication. Use --cookies", {

@@ -275,11 +275,12 @@ Encoders can be downloaded for `large-v3-turbo`, `large-v3`, `medium`, `small` a
 
 ### Browser sign-in
 
-Some videos only play when you're signed in: age-restricted, private and members-only YouTube videos, videos YouTube wants to confirm you're not a bot for, and many Instagram posts. X also limits downloads without an account at times. Choose the browser you're signed in to those sites with under **Browser Sign-In**, and yt-dlp reads that browser's cookies on your Mac.
+Some videos only play when you're signed in: age-restricted, private and members-only YouTube videos, videos YouTube wants to confirm you're not a bot for, and many Instagram posts. X also limits downloads without an account at times. Choose **Firefox** or **Safari** under **Browser Sign-In**, and yt-dlp reads that browser's cookies on your Mac. Sign in to the download site in that browser first.
 
 - **Safari:** macOS protects Safari's cookies. Give Raycast Full Disk Access in System Settings → Privacy & Security → Full Disk Access.
-- **Chrome, Brave, Edge and other Chromium browsers:** macOS asks to allow access to the browser's “Safe Storage” key the first time. Choose Always Allow.
 - **Firefox:** works without extra permissions.
+
+Chromium browsers aren't supported for Browser Sign-In because reading their cookies requires Keychain access. Previously saved Chromium choices are treated as Browser Sign-In being off. The extension ignores yt-dlp configuration files so they cannot enable a different browser.
 
 ## Troubleshooting
 

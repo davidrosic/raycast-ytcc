@@ -28,7 +28,7 @@ export function compareVersions(a: string, b: string): number {
 
 export async function ytDlpVersion(settings: Settings): Promise<string> {
   const bin = await executable(settings.ytDlpPath, "yt-dlp");
-  return (await run(bin, ["--version"])).trim();
+  return (await run(bin, ["--ignore-config", "--version"])).trim();
 }
 
 /** The newest yt-dlp release on GitHub. */
@@ -109,7 +109,11 @@ export function updateCommand(
       args: ["-m", "pip", "install", "--upgrade", "yt-dlp"],
       display: `${python} -m pip install --upgrade yt-dlp`,
     };
-  return { bin, args: ["-U"], display: `${bin} -U` };
+  return {
+    bin,
+    args: ["--ignore-config", "-U"],
+    display: `${bin} --ignore-config -U`,
+  };
 }
 
 export async function ytDlpUpdateCommand(

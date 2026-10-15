@@ -1016,13 +1016,7 @@ export async function run(
 
 export const cookieBrowsers: { value: string; title: string }[] = [
   { value: "safari", title: "Safari" },
-  { value: "chrome", title: "Chrome" },
   { value: "firefox", title: "Firefox" },
-  { value: "brave", title: "Brave" },
-  { value: "edge", title: "Edge" },
-  { value: "chromium", title: "Chromium" },
-  { value: "opera", title: "Opera" },
-  { value: "vivaldi", title: "Vivaldi" },
 ];
 
 function cookieBrowser(settings: Settings) {
@@ -1037,7 +1031,7 @@ function cookieBrowser(settings: Settings) {
  * fails without it.
  */
 export async function ytDlpOptions(settings: Settings): Promise<string[]> {
-  const options = ["--no-warnings"];
+  const options = ["--ignore-config", "--no-warnings"];
   try {
     options.push(
       "--ffmpeg-location",
@@ -1057,11 +1051,11 @@ export function explainYtDlpError(error: unknown, settings: Settings): unknown {
   const browser = cookieBrowser(settings);
   const signIn = browser
     ? ` Make sure you're signed in to YouTube in ${browser.title} with an account that can watch it.`
-    : " To use your YouTube account, choose your browser under Browser Sign-In in extension preferences.";
+    : " To use your YouTube account, choose Firefox or Safari under Browser Sign-In in extension preferences.";
   const message = error.message;
   if (browser && /could not find .*(cookies database|profile)/i.test(message))
     return new Error(
-      `yt-dlp couldn't find ${browser.title}'s cookies. Under Browser Sign-In in extension preferences, choose the browser you use YouTube in.`,
+      `yt-dlp couldn't find ${browser.title}'s cookies. Sign in to YouTube in ${browser.title}, or choose Firefox or Safari under Browser Sign-In in extension preferences.`,
     );
   if (browser && /Operation not permitted|PermissionError/i.test(message))
     return new Error(
@@ -1069,7 +1063,7 @@ export function explainYtDlpError(error: unknown, settings: Settings): unknown {
     );
   if (browser && /decrypt|keychain|Safe Storage/i.test(message))
     return new Error(
-      `yt-dlp couldn't read ${browser.title}'s cookies. Allow access to “${browser.title} Safe Storage” when macOS asks, or choose another browser under Browser Sign-In.`,
+      `yt-dlp couldn't read ${browser.title}'s cookies. Sign in again in ${browser.title}, or choose Firefox or Safari under Browser Sign-In in extension preferences.`,
     );
   if (
     /Sign in to confirm your age|age.restricted|inappropriate for some users/i.test(
@@ -1092,7 +1086,7 @@ export function explainYtDlpError(error: unknown, settings: Settings): unknown {
   const site = siteName(message);
   const signInTo = browser
     ? ` Make sure you're signed in to ${site} in ${browser.title}.`
-    : ` To use your ${site} account, choose your browser under Browser Sign-In in extension preferences.`;
+    : ` To use your ${site} account, choose Firefox or Safari under Browser Sign-In in extension preferences.`;
   if (
     /no video (could be found|in this (post|tweet))|No video formats found|is not a video/i.test(
       message,

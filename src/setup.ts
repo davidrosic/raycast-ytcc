@@ -57,7 +57,12 @@ async function toolVersion(
   try {
     if (tool.binary === "yt-dlp")
       return (
-        await run(path, ["--version"], undefined, AbortSignal.timeout(5000))
+        await run(
+          path,
+          ["--ignore-config", "--version"],
+          undefined,
+          AbortSignal.timeout(5000),
+        )
       ).trim();
     if (tool.binary === "ffmpeg")
       return /ffmpeg version (\S+)/.exec(
