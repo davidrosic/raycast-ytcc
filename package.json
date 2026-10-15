@@ -89,7 +89,7 @@
     {
       "name": "browserCookies",
       "title": "Browser Sign-In",
-      "description": "Off by default. Choose the browser you're signed in with to download age-restricted, private and members-only YouTube videos, and posts on Instagram, X and other sites that need an account. yt-dlp reads that browser's cookies on your Mac; they are never sent anywhere else.",
+      "description": "Off by default. Choose the browser you're signed in with to download age-restricted, private and members-only YouTube videos, and posts on Instagram, X and other sites that need an account. yt-dlp reads cookies locally and sends the cookies needed to the site you're downloading from.",
       "type": "dropdown",
       "default": "none",
       "required": false,

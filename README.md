@@ -322,13 +322,12 @@ Everything runs on your Mac. The extension talks only to:
 - YouTube, or the site a link is from, for video details, thumbnails, subtitles, audio and video.
 - X's embed service (`cdn.syndication.twimg.com`), for the photos in X posts.
 - GitHub, to check the newest yt-dlp version at most twice a day.
-
-With **Browser Tab** on, the extension reads the address of your browser's current tab when you open **Download Video** from the browser. It isn't stored or sent anywhere.
-
 - Hugging Face, to download the Silero VAD model once, and the whisper models and Core ML encoders you choose.
 - Homebrew, when you install tools with it.
 
-Audio, video and transcripts never leave your computer. Dictation recordings are temporary and removed after local transcription. With Browser Sign-In on, yt-dlp reads your browser's cookies locally to talk to YouTube; they are not sent anywhere else.
+With **Browser Tab** on, the extension reads the address of your browser's current tab when you open **Download Video** from the browser and uses it to load video details from that site.
+
+Recordings and transcripts stay on your computer. Dictation recordings are temporary and removed after local transcription. With Browser Sign-In on, yt-dlp reads your browser's cookies locally and sends the cookies needed to the site you're downloading from.
 
 ## Development
 

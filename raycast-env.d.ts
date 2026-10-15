@@ -14,7 +14,7 @@ type ExtensionPreferences = {
   "ytDlpPath"?: string,
   /** ffmpeg Executable - Needed for MP3, M4A and MP4, subtitle conversion, and transcription */
   "ffmpegPath"?: string,
-  /** Browser Sign-In - Off by default. Choose the browser you're signed in with to download age-restricted, private and members-only YouTube videos, and posts on Instagram, X and other sites that need an account. yt-dlp reads that browser's cookies on your Mac; they are never sent anywhere else. */
+  /** Browser Sign-In - Off by default. Choose the browser you're signed in with to download age-restricted, private and members-only YouTube videos, and posts on Instagram, X and other sites that need an account. yt-dlp reads cookies locally and sends the cookies needed to the site you're downloading from. */
   "browserCookies": "none" | "safari" | "chrome" | "firefox" | "brave" | "edge" | "chromium" | "opera" | "vivaldi",
   /** Browser Tab - When no video link is in your clipboard, Download Video opens the video in the browser tab you were watching. macOS asks once to let Raycast read the tab's address. */
   "browserTab": boolean,
