@@ -332,6 +332,8 @@ Audio, video and transcripts never leave your computer. Dictation recordings are
 
 ## Development
 
+Use Node.js 22.22.2 or newer.
+
 ```sh
 npm install
 npm run dev    # load the extension in Raycast
